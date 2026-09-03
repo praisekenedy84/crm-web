@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Link, router, usePage } from '@inertiajs/react';
 import {
   LayoutDashboard, Users, Building2, UserPlus, Kanban, CheckSquare,
   LogOut, Settings, BarChart3, TrendingUp, Upload, Shield,
   DollarSign, Package, Briefcase, FolderKanban, FileText, Receipt, MapPin,
   Menu, X, ChevronsUpDown, CalendarDays,
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
 import { Button } from '@/Components/ui/button';
 import { Avatar, AvatarFallback } from '@/Components/ui/avatar';
 import { cn } from '@/lib/utils';
+import type { SharedPageProps, SharedUser } from '@/types';
 
 const crmNavItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -37,35 +37,39 @@ const marketingNavItems = [
   { to: '/marketing', label: 'Content Calendar', icon: CalendarDays },
 ];
 
+function isActivePath(currentUrl: string, to: string) {
+  const path = currentUrl.split('?')[0];
+  return to === '/' ? path === '/' : path === to || path.startsWith(`${to}/`);
+}
+
 function NavItem({
   to,
   label,
   icon: Icon,
-  end,
   onNavigate,
 }: {
   to: string;
   label: string;
   icon: React.ElementType;
-  end?: boolean;
   onNavigate?: () => void;
 }) {
+  const { url } = usePage();
+  const isActive = isActivePath(url, to);
+
   return (
-    <NavLink to={to} end={end} onClick={onNavigate}>
-      {({ isActive }) => (
-        <span
-          className={cn(
-            'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all',
-            isActive
-              ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm'
-              : 'text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-          )}
-        >
-          <Icon size={18} strokeWidth={isActive ? 2.25 : 1.8} />
-          {label}
-        </span>
-      )}
-    </NavLink>
+    <Link href={to} onClick={onNavigate}>
+      <span
+        className={cn(
+          'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all',
+          isActive
+            ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm'
+            : 'text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+        )}
+      >
+        <Icon size={18} strokeWidth={isActive ? 2.25 : 1.8} />
+        {label}
+      </span>
+    </Link>
   );
 }
 
@@ -84,7 +88,7 @@ function NavSection({
         {title}
       </p>
       {items.map(({ to, label, icon }) => (
-        <NavItem key={to} to={to} label={label} icon={icon} end={to === '/'} onNavigate={onNavigate} />
+        <NavItem key={to} to={to} label={label} icon={icon} onNavigate={onNavigate} />
       ))}
     </div>
   );
@@ -99,7 +103,7 @@ function SidebarContent({
   onClose,
   showCloseButton,
 }: {
-  user: ReturnType<typeof useAuth>['user'];
+  user: SharedUser | null;
   initials: string;
   logout: () => void;
   visibleErpNavItems: Array<{ to: string; label: string; icon: React.ElementType }>;
@@ -177,9 +181,10 @@ function SidebarContent({
   );
 }
 
-export default function Layout() {
-  const { user, logout } = useAuth();
-  const location = useLocation();
+export default function Layout({ children }: { children: ReactNode }) {
+  const page = usePage<SharedPageProps>();
+  const user = page.props.auth?.user ?? null;
+  const url = page.url;
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const initials = user?.name
@@ -190,16 +195,17 @@ export default function Layout() {
     .toUpperCase() ?? 'U';
 
   const closeSidebar = () => setSidebarOpen(false);
+  const logout = () => router.post('/logout');
   const enabledModules = user?.tenant?.enabled_modules;
   const visibleErpNavItems = erpNavItems.filter(
     (item) => !enabledModules || enabledModules.includes(item.module)
   );
   const allNavItems = [...crmNavItems, ...marketingNavItems, ...visibleErpNavItems];
-  const currentPage = allNavItems.find((item) => item.to === location.pathname)?.label ?? 'Workspace';
+  const currentPage = allNavItems.find((item) => isActivePath(url, item.to))?.label ?? 'Workspace';
 
   useEffect(() => {
     setSidebarOpen(false);
-  }, [location.pathname]);
+  }, [url]);
 
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -229,7 +235,7 @@ export default function Layout() {
         />
       )}
 
-      {/* Sidebar â€” drawer on mobile, fixed on desktop */}
+      {/* Sidebar — drawer on mobile, fixed on desktop */}
       <aside
         className={cn(
           'fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform duration-300 ease-in-out lg:static lg:z-auto lg:shrink-0 lg:translate-x-0',
@@ -280,7 +286,7 @@ export default function Layout() {
 
         <main className="flex-1 overflow-auto">
           <div className="mx-auto max-w-[1480px] px-4 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-9">
-            <Outlet />
+            {children}
           </div>
         </main>
       </div>

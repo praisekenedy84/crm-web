@@ -1,58 +1,34 @@
 import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Head, useForm } from '@inertiajs/react';
 import { Eye, EyeOff, ShieldCheck, Sparkles } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { ApiError } from '../lib/api';
 import { FormField } from '@/Components/forms';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Alert, AlertDescription } from '@/Components/ui/alert';
-import { Skeleton } from '@/Components/ui/skeleton';
 
 export default function LoginPage() {
-  const { user, loading, login } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const { data, setData, post, processing, errors } = useForm({
+    email: '',
+    password: '',
+  });
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-md border-0 shadow-lg ring-1 ring-border/60">
-          <CardHeader className="space-y-2">
-            <Skeleton className="mx-auto h-8 w-48" />
-            <Skeleton className="mx-auto h-4 w-64" />
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  const email = data.email;
+  const password = data.password;
+  const submitting = processing;
+  // The server throws a ValidationException keyed on `email` for bad credentials
+  // and for locked accounts, so both surface here.
+  const error = errors.email ?? errors.password ?? '';
 
-  if (user) return <Navigate to="/" replace />;
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSubmitting(true);
-    try {
-      await login(email, password);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Login failed');
-    } finally {
-      setSubmitting(false);
-    }
+    post('/login');
   };
 
   return (
     <div className="relative flex min-h-screen overflow-hidden bg-background">
+      <Head title="Sign in" />
       <div className="relative hidden flex-1 flex-col justify-between overflow-hidden bg-sidebar p-12 text-sidebar-foreground lg:flex xl:p-16">
         <div className="pointer-events-none absolute -right-40 -top-40 size-[34rem] rounded-full border border-white/10" />
         <div className="pointer-events-none absolute -right-24 -top-24 size-[22rem] rounded-full border border-white/10" />
@@ -120,7 +96,7 @@ export default function LoginPage() {
                   type="email"
                   placeholder="you@company.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => setData('email', e.target.value)}
                   autoComplete="email"
                   autoCapitalize="none"
                   required
@@ -134,7 +110,7 @@ export default function LoginPage() {
                     type={showPassword ? 'text' : 'password'}
                     placeholder="Enter your password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => setData('password', e.target.value)}
                     autoComplete="current-password"
                     className="pr-10"
                     required
