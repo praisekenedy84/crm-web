@@ -1,8 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
+import { Head, router, usePage } from '@inertiajs/react';
 import { ArrowRight, CircleDollarSign, Radio, Scale, Target } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { api } from '../lib/api';
-import { useAuth } from '../context/AuthContext';
+import type {
+  ConversionSource, FinancialSummary, LeaderboardEntry, PipelineSummary,
+} from '../lib/api';
+import type { SharedPageProps } from '@/types';
 import { WelcomeBanner } from '@/Components/WelcomeBanner';
 import { StatCard } from '@/Components/StatCard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/Components/ui/card';
@@ -13,33 +14,23 @@ import { PageHeader } from '@/Components/PageHeader';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/Components/ui/table';
-import { Skeleton } from '@/Components/ui/skeleton';
+interface DashboardPageProps {
+  pipeline: PipelineSummary;
+  conversion: { sources: ConversionSource[] };
+  leaderboard: { leaderboard: LeaderboardEntry[] };
+  financeEnabled: boolean;
+  financialSummary: FinancialSummary | null;
+}
 
-export default function DashboardPage() {
-  const navigate = useNavigate();
-  const { user } = useAuth();
-  const financeEnabled = user?.tenant?.enabled_modules?.includes('finance') ?? false;
-
-  const { data: pipeline, isLoading: pipelineLoading, isError: pipelineError, refetch: refetchPipeline } = useQuery({
-    queryKey: ['pipeline-summary'],
-    queryFn: api.getPipelineSummary,
-  });
-
-  const { data: conversion, isLoading: conversionLoading, isError: conversionError, refetch: refetchConversion } = useQuery({
-    queryKey: ['conversion-rate'],
-    queryFn: api.getConversionRate,
-  });
-
-  const { data: leaderboard, isLoading: leaderboardLoading, isError: leaderboardError, refetch: refetchLeaderboard } = useQuery({
-    queryKey: ['leaderboard'],
-    queryFn: api.getLeaderboard,
-  });
-
-  const { data: financialSummary } = useQuery({
-    queryKey: ['financial-summary'],
-    queryFn: () => api.getFinancialSummary(),
-    enabled: financeEnabled,
-  });
+export default function DashboardPage({
+  pipeline,
+  conversion,
+  leaderboard,
+  financeEnabled,
+  financialSummary,
+}: DashboardPageProps) {
+  const user = usePage<SharedPageProps>().props.auth.user;
+  const navigate = (href: string) => router.visit(href);
 
   const formatCurrency = (n: number, currency = 'TZS') =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
@@ -49,37 +40,6 @@ export default function DashboardPage() {
 
   const maxStageValue = Math.max(...(pipeline?.stages.map((s) => s.total_value) ?? [1]), 1);
 
-  if (pipelineLoading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-16 w-64" />
-        <Skeleton className="h-40 w-full rounded-2xl" />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-32 w-full rounded-2xl" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (pipelineError) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title="Revenue overview" description="Pipeline health, conversion signals, and team momentum." eyebrow="Workspace" />
-        <Card className="border-0 ring-1 ring-border/70">
-          <DataState
-            tone="error"
-            title="Dashboard data is unavailable"
-            description="We could not load your pipeline summary. Check your connection and try again."
-            actionLabel="Try again"
-            onAction={() => refetchPipeline()}
-          />
-        </Card>
-      </div>
-    );
-  }
-
   const pipelineStages = pipeline?.stages ?? [];
   const sources = conversion?.sources ?? [];
   const reps = leaderboard?.leaderboard ?? [];
@@ -87,6 +47,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-7">
+      <Head title="Dashboard" />
       <PageHeader
         eyebrow="Workspace"
         title="Revenue overview"
@@ -197,11 +158,7 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {conversionLoading ? (
-              <div className="space-y-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
-            ) : conversionError ? (
-              <DataState compact tone="error" title="Conversion data unavailable" description="The source report could not be loaded." actionLabel="Try again" onAction={() => refetchConversion()} />
-            ) : sources.length === 0 ? (
+            {sources.length === 0 ? (
               <DataState compact title="No conversion data yet" description="Lead source performance will appear after leads begin converting." />
             ) : sources.map((src) => (
               <div key={src.source}>
@@ -227,9 +184,7 @@ export default function DashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {conversionError ? (
-              <DataState compact tone="error" title="Sources unavailable" description="Lead-source totals could not be loaded." actionLabel="Try again" onAction={() => refetchConversion()} />
-            ) : sources.length === 0 ? (
+            {sources.length === 0 ? (
               <DataState compact title="No sources yet" description="Add lead sources to compare acquisition performance." />
             ) : sources.slice(0, 4).map((src) => (
               <div
@@ -257,11 +212,7 @@ export default function DashboardPage() {
             <CardDescription>Top performers this period</CardDescription>
           </CardHeader>
           <CardContent>
-            {leaderboardLoading ? (
-              <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-11 w-full" />)}</div>
-            ) : leaderboardError ? (
-              <DataState compact tone="error" title="Leaderboard unavailable" description="Team performance could not be loaded." actionLabel="Try again" onAction={() => refetchLeaderboard()} />
-            ) : reps.length === 0 ? (
+            {reps.length === 0 ? (
               <DataState compact title="No team results yet" description="Won deals will populate the team leaderboard." />
             ) : (
               <Table>

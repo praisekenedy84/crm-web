@@ -11,6 +11,7 @@ use App\Models\LedgerLine;
 use App\Models\Payment;
 use App\Services\AuditService;
 use App\Services\AutomationEngine;
+use App\Services\FinanceReportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -173,48 +174,13 @@ class FinanceController extends Controller
         return response()->json($query->paginate(20));
     }
 
-    public function financialSummary(Request $request): JsonResponse
+    public function financialSummary(Request $request, FinanceReportService $financeReports): JsonResponse
     {
         $data = $request->validate([
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date'],
         ]);
 
-        $query = LedgerLine::query()
-            ->join('ledger_entries', 'ledger_entries.id', '=', 'ledger_lines.ledger_entry_id')
-            ->join('chart_of_accounts', 'chart_of_accounts.id', '=', 'ledger_lines.account_id')
-            ->where('ledger_entries.status', 'posted');
-
-        if (! empty($data['from'])) {
-            $query->where('ledger_entries.entry_date', '>=', $data['from']);
-        }
-
-        if (! empty($data['to'])) {
-            $query->where('ledger_entries.entry_date', '<=', $data['to']);
-        }
-
-        $byType = $query
-            ->select(
-                'chart_of_accounts.type',
-                DB::raw('SUM(ledger_lines.debit) as total_debit'),
-                DB::raw('SUM(ledger_lines.credit) as total_credit'),
-            )
-            ->groupBy('chart_of_accounts.type')
-            ->get()
-            ->keyBy('type');
-
-        $revenue = (float) ($byType->get('revenue')?->total_credit ?? 0) - (float) ($byType->get('revenue')?->total_debit ?? 0);
-        $expenses = (float) ($byType->get('expense')?->total_debit ?? 0) - (float) ($byType->get('expense')?->total_credit ?? 0);
-
-        return response()->json([
-            'period' => ['from' => $data['from'] ?? null, 'to' => $data['to'] ?? null],
-            'revenue' => round($revenue, 2),
-            'expenses' => round($expenses, 2),
-            'net_income' => round($revenue - $expenses, 2),
-            'by_account_type' => $byType->map(fn ($row) => [
-                'total_debit' => round((float) $row->total_debit, 2),
-                'total_credit' => round((float) $row->total_credit, 2),
-            ]),
-        ]);
+        return response()->json($financeReports->summary($data['from'] ?? null, $data['to'] ?? null));
     }
 }

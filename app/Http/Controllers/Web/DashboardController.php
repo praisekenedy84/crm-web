@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Web;
 
 use App\Enums\PlatformModule;
 use App\Http\Controllers\Controller;
-use App\Services\ModuleService;
+use App\Services\FinanceReportService;
 use App\Services\ReportService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -12,7 +12,10 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __construct(private readonly ReportService $reports) {}
+    public function __construct(
+        private readonly ReportService $reports,
+        private readonly FinanceReportService $financeReports,
+    ) {}
 
     public function __invoke(Request $request): Response
     {
@@ -23,10 +26,11 @@ class DashboardController extends Controller
         );
 
         return Inertia::render('DashboardPage', [
-            'pipeline' => fn () => $this->reports->pipelineSummary(),
-            'conversion' => fn () => $this->reports->conversionRate(),
-            'leaderboard' => fn () => $this->reports->leaderboard(),
+            'pipeline' => $this->reports->pipelineSummary(),
+            'conversion' => $this->reports->conversionRate(),
+            'leaderboard' => $this->reports->leaderboard(),
             'financeEnabled' => $financeEnabled,
+            'financialSummary' => $financeEnabled ? $this->financeReports->summary() : null,
         ]);
     }
 }
