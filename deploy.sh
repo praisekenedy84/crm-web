@@ -6,36 +6,34 @@
 # or call it from there with `bash deploy.sh`. Forge runs the script from the site
 # root, which is this repository root, after it has already pulled the latest commit.
 #
-# See docs/DEPLOYMENT.md for site setup (web directory, Nginx, queue daemons).
+# This is a single Laravel + Inertia application: one repo, one site, one deploy.
+# See docs/DEPLOYMENT.md for site setup (web directory, queue daemons, scheduler).
 
 set -euo pipefail
 
-# --- Backend -----------------------------------------------------------------
-cd backend
+# $FORGE_PHP / $FORGE_COMPOSER resolve to the PHP version configured for this site.
+# Fall back to the bare binaries when running the script outside Forge.
+PHP="${FORGE_PHP:-php}"
+COMPOSER="${FORGE_COMPOSER:-composer}"
 
-composer install --no-dev --optimize-autoloader
-php artisan migrate --force
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
+# --- Backend -----------------------------------------------------------------
+$COMPOSER install --no-dev --optimize-autoloader --no-interaction
+
+$PHP artisan migrate --force
+$PHP artisan config:cache
+$PHP artisan route:cache
+$PHP artisan view:cache
 
 # Signals running queue workers to exit after their current job so they pick up
 # the new code. Supervisor restarts them automatically.
-php artisan queue:restart
+$PHP artisan queue:restart
 
 # --- Frontend ----------------------------------------------------------------
-cd ../frontend
-
 # `npm ci` installs devDependencies too, which the build needs (`tsc && vite build`).
 # Do not set NODE_ENV=production before this step.
+# Output is written to public/build and served by Laravel's @vite directive.
 npm ci
 npm run build
-
-# The built SPA is served from the Laravel public directory (same-origin strategy).
-# `assets/` is cleared first so hashed bundles from previous deploys do not pile up.
-# This never touches Laravel's own public files (index.php, .htaccess, storage symlink).
-rm -rf ../backend/public/assets
-cp -R dist/. ../backend/public/
 
 # --- Restarts (performed by Forge, not by this script) -----------------------
 #
@@ -44,12 +42,15 @@ cp -R dist/. ../backend/public/
 #
 #   ( flock -w 10 9 || exit 1; echo 'Restarting FPM...'; sudo -S service php8.2-fpm reload ) 9>/tmp/fpmlock
 #
+# Not required if the site uses Forge's zero-downtime deployments, since each
+# release is deployed into a new, uncached directory.
+#
 # Queue workers are managed as Forge Daemons (Supervisor). Configure one per site
 # under Server > Daemons, then Forge/Supervisor handles restarts:
 #
-#   php /home/forge/<site>/backend/artisan queue:work --sleep=3 --tries=3 --timeout=90
+#   php /home/forge/<site>/artisan queue:work --sleep=3 --tries=3 --timeout=90
 #   sudo supervisorctl restart <daemon-name>:*
 #
 # Laravel's scheduler runs from Forge > Scheduler (or a system cron entry):
 #
-#   php /home/forge/<site>/backend/artisan schedule:run
+#   php /home/forge/<site>/artisan schedule:run

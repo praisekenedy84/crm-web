@@ -5,6 +5,10 @@ alongside other Laravel products on the same server. There is no Docker anywhere
 stack. For running the project on your own machine, see the **Local Development Setup**
 section in the root [`README.md`](../README.md) instead; this document covers production only.
 
+This is a **single Laravel + Inertia application**: the React frontend is compiled into
+`public/build` by Vite and served by the same Laravel app that serves the data. One
+repository, one Forge site, one deploy. There is no separate frontend site to configure.
+
 ## 1. Server prerequisites
 
 These are shared with the other products on the VPS and should already exist:
@@ -14,7 +18,7 @@ These are shared with the other products on the VPS and should already exist:
 | PHP 8.2+ with `pdo_pgsql` | Required by `composer.json` |
 | PostgreSQL | Shared instance, listening on **port 5433** |
 | Redis | Listening on `127.0.0.1:6379` |
-| Node.js 20+ and npm | Needed on the server because the frontend is built during deploy |
+| Node.js 20+ and npm | Needed on the server because assets are built during deploy |
 | Composer 2 | |
 
 Create a dedicated database and role for this app on the shared PostgreSQL instance —
@@ -27,23 +31,33 @@ CREATE DATABASE crm OWNER crm;
 
 ## 2. Site setup in Forge
 
-Create the site, then set **Web Directory** to:
+Create the site and leave **Web Directory** at Forge's default:
 
 ```
-/backend/public
+/public
 ```
 
-This is the critical setting. Forge defaults to `/public`, which does not exist at this
-repository root — the Laravel app lives in `backend/`, so the document root must point at
-`backend/public`.
+Since the Laravel app now lives at the repository root, the default is correct — no
+custom web directory is needed.
+
+### Deployment strategy
+
+Forge enables **zero-downtime deployments** by default for new sites, and this can only
+be chosen at site creation. Either strategy works with this layout:
+
+- **Zero-downtime** — each release is cloned into `releases/` and symlinked. Forge shares
+  the `.env` automatically. Add `storage` as a shared path so uploads and logs persist.
+  No FPM reload is needed. `npm ci` runs against a cold cache each deploy, so builds are
+  slower.
+- **Standard** — in-place `git pull` against the live directory. Faster, but the site can
+  serve a half-updated state for a few seconds mid-deploy.
 
 ## 3. Environment file
 
-Forge stores the `.env` for the site, but it must live at `backend/.env`, not the repo root.
-Use Forge's **Environment** editor if the site path resolves there, otherwise create it once
-over SSH by copying `backend/.env.example` and filling in the blanks.
+Because the Laravel app is at the repository root, Forge's **Environment** tab edits the
+correct file (`.env` at the site root) with no extra configuration.
 
-`backend/.env.example` already ships with production-shaped defaults:
+`.env.example` ships with production-shaped defaults:
 
 ```
 APP_ENV=production
@@ -70,96 +84,71 @@ Paste the contents of [`deploy.sh`](../deploy.sh) into Forge's **Deploy Script**
 the box to `bash deploy.sh`. It performs:
 
 ```
-cd backend
 composer install --no-dev --optimize-autoloader
 php artisan migrate --force
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
 php artisan queue:restart
-cd ../frontend
 npm ci
 npm run build
 ```
 
-followed by copying the built `dist/` into `backend/public` (see step 5).
+Note there are no `cd` steps any more — every command runs at the repository root.
 
-Enable **Restart FPM** in Forge so it appends the FPM reload after the script. Queue workers
-are restarted by Supervisor once `php artisan queue:restart` has signalled them.
+The script uses `$FORGE_PHP` and `$FORGE_COMPOSER` so the site's configured PHP version is
+always used. Enable **Restart FPM** in Forge for standard deployments; it is unnecessary
+with zero-downtime deployments.
 
 ### Queue workers and scheduler
 
 Configure under **Server > Daemons**:
 
 ```
-php /home/forge/<site>/backend/artisan queue:work --sleep=3 --tries=3 --timeout=90
+php /home/forge/<site>/artisan queue:work --sleep=3 --tries=3 --timeout=90
 ```
 
 And under **Site > Scheduler** (or a cron entry running every minute):
 
 ```
-php /home/forge/<site>/backend/artisan schedule:run
+php /home/forge/<site>/artisan schedule:run
 ```
 
 The scheduler drives `SendTaskReminders`, `ProcessContractExpiry`,
 `GeneratePerformanceSnapshots`, and `SyncAllEmailAccounts`.
 
-## 5. Serving the frontend
+## 5. Assets
 
-The frontend is a Vite SPA that builds to a static `frontend/dist/` folder. The Vite dev
-server (port 5173) is **development only** and is never run in production.
+`npm run build` compiles `resources/js` and `resources/css` into `public/build`, and Laravel's
+`@vite` directive in `resources/views/app.blade.php` resolves the hashed filenames from the
+generated manifest. Nothing needs to be copied by hand, and `public/build` is gitignored —
+it is produced on the server during every deploy.
 
-There are two viable strategies. **This repository is currently configured for option A.**
+Inertia resolves page components lazily, so each page under `resources/js/Pages` is emitted
+as its own chunk rather than one large bundle.
 
-### Option A — single deployed app (current choice)
+The Vite dev server is a local-only tool and is never run in production.
 
-`deploy.sh` copies `frontend/dist/` into `backend/public/` after the build, so one Forge site
-serves both the SPA and the API from the same origin. `frontend/.env.production` therefore
-leaves `VITE_API_URL` empty, and `frontend/src/lib/api.ts` falls back to relative `/api/v1`
-requests. No CORS configuration is needed.
+### Nginx
 
-The one thing this requires is an Nginx SPA fallback, because client-side routes such as
-`/contacts` are not registered in `routes/web.php` and would otherwise hit Laravel and 404.
-Edit the site's Nginx config in Forge and make the location blocks read:
-
-```nginx
-location /api {
-    try_files $uri $uri/ /index.php?$query_string;
-}
-
-location / {
-    try_files $uri $uri/ /index.html;
-}
-```
-
-Keep Forge's existing `location ~ \.php$ { ... fastcgi ... }` block untouched — it is what
-actually executes `index.php`. Also keep `index index.html index.htm index.php;` so that `/`
-resolves to the SPA shell.
-
-If you also expose `/up` (the Laravel health check) or `/storage`, add matching `location`
-blocks that fall through to `/index.php?$query_string`.
-
-### Option B — separate static site on a subdomain
-
-Serve the API from `api.example.com` (web directory `/backend/public`) and the SPA from
-`app.example.com` as its own Forge site with web directory pointing at `frontend/dist`.
-
-To switch to this, you must:
-
-1. Set `VITE_API_URL=https://api.example.com` in `frontend/.env.production` and rebuild.
-2. Remove the `cp -R dist/. ../backend/public/` step from `deploy.sh`.
-3. Configure CORS on the API so `app.example.com` is an allowed origin.
-4. Add the SPA fallback (`try_files $uri $uri/ /index.html;`) on the frontend site instead.
-
-Auth uses bearer tokens from `localStorage` rather than cookies, so cross-origin does not
-require cookie/domain configuration — but it does require the CORS headers in step 3.
+No custom Nginx configuration is required. Inertia routes are real Laravel routes, so
+Forge's default `try_files $uri $uri/ /index.php?$query_string;` handles deep links
+correctly. (This is a simplification over the previous SPA layout, which needed an
+`/index.html` fallback.)
 
 ## 6. Post-deploy checks
 
 ```bash
 curl -sS https://<domain>/up                     # Laravel health endpoint
-curl -sS https://<domain>/api/v1/docs/openapi    # API reachable
+curl -sS https://<domain>/api/v1/docs/openapi    # third-party API reachable
 ```
 
-Then load the site in a browser and hard-refresh a deep link (for example `/contacts`) to
-confirm the SPA fallback in step 5 is working.
+Then load the site in a browser and navigate to a deep link to confirm routing works.
+
+## 7. The third-party API
+
+`routes/api.php` is still fully wired and is **not** superseded by Inertia. It serves
+consumers outside this application's own UI — mobile clients (`sync/delta`), API-key
+integrations, the webhook ecosystem, SSO provider callbacks, and the published OpenAPI
+spec — authenticated with tokens rather than sessions. It deploys with the same app and
+needs no separate configuration.

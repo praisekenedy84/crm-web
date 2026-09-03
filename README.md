@@ -6,11 +6,28 @@ Multi-tenant Customer Relationship Management platform — all four phases imple
 
 | Layer | Technology |
 |---|---|
+| Application | Single Laravel 12 + Inertia.js monolith |
 | Backend | Laravel 12, Sanctum, Queue jobs |
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS (PWA-ready) |
 | Database | PostgreSQL 14+ (local and production) |
 | Cache/Queue | Redis |
 | Hosting | Laravel Forge — native PHP-FPM/Nginx, no containers |
+
+The React frontend lives inside the Laravel app at `resources/js` and is served by it —
+there is no separate frontend project or deploy.
+
+```
+app/            Laravel application code
+routes/
+  web.php       Inertia pages (session auth) — this app's own UI
+  api.php       Third-party API: mobile sync, API keys, webhooks, SSO (token auth)
+resources/
+  js/
+    Pages/      Inertia page components
+    Components/ Shared React components
+  css/app.css   Tailwind entry
+public/build/   Compiled assets (generated, gitignored)
+```
 
 ## Feature Coverage
 
@@ -80,20 +97,22 @@ CREATE DATABASE crm OWNER crm;
 > **Port: 5432 vs 5433.** A stock local PostgreSQL install listens on **5432**, and locally
 > that is fine because nothing else competes for it. **Production uses 5433**, because the
 > shared VPS moved its PostgreSQL instance off the default port. The committed
-> `backend/.env.example` carries the production value `DB_PORT=5433`, so if your local
+> `.env.example` carries the production value `DB_PORT=5433`, so if your local
 > PostgreSQL is on the default port, change `DB_PORT` to `5432` in your own `.env`. Getting
 > these two mixed up is the most likely cause of a connection-refused error on either side.
 
-### 2. Backend
+### 2. Install
+
+Everything installs from the repository root — there is only one project now:
 
 ```bash
-cd backend
 composer install
+npm install
 cp .env.example .env
 php artisan key:generate
 ```
 
-Then edit `backend/.env` for local use — `.env.example` ships with production defaults:
+Then edit `.env` for local use — `.env.example` ships with production defaults:
 
 ```
 APP_ENV=local
@@ -109,27 +128,26 @@ Run the migrations and seed the demo data:
 
 ```bash
 php artisan migrate --seed
-php artisan serve --host=127.0.0.1 --port=8000
 ```
 
-Laravel Herd or Valet works equally well instead of `artisan serve`; point it at
-`backend/public` and use the hostname it assigns.
+### 3. Run it
 
-### 3. Frontend
+Two processes, side by side in separate terminals:
 
 ```bash
-cd frontend
-npm install
-cp .env.example .env
-npm run dev
+php artisan serve --host=127.0.0.1 --port=8000   # the app
+npm run dev                                       # Vite, for hot module reload
 ```
 
-Open **http://localhost:5173**.
+Open **http://localhost:8000** — the Laravel URL, not a separate frontend port.
 
-`VITE_API_URL` in `frontend/.env` controls where API calls go. Leaving it empty is the
-recommended default: Vite's dev proxy forwards `/api` to `http://127.0.0.1:8000` (configured
-in `vite.config.ts`), which avoids CORS entirely. Set it to `http://localhost:8000` only if
-you want to bypass the proxy and hit the backend directly.
+Vite runs only as an asset server that Laravel's `@vite` directive talks to, so there is no
+second application to visit and no `VITE_API_URL` to configure: pages and data come from the
+same origin. Laravel Herd or Valet works equally well instead of `artisan serve`; point it at
+`public/` and use the hostname it assigns.
+
+For a production-like check without the dev server, run `npm run build` and load the app
+normally — Laravel will serve the compiled assets from `public/build`.
 
 ### Demo credentials
 
@@ -140,11 +158,15 @@ you want to bypass the proxy and hit the backend directly.
 
 ### Production
 
-The Vite dev server is a local-only tool. In production the frontend is built to a static
-`dist/` folder and served by Nginx. Deployment is documented separately in
+The Vite dev server is a local-only tool. In production `npm run build` compiles assets into
+`public/build`, which the same Laravel app serves. Deployment is documented separately in
 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
-## Key API Routes
+## Third-party API Routes
+
+`routes/api.php` serves consumers outside this application's own UI — mobile clients, API-key
+integrations, webhooks, and SSO callbacks — using token auth. This app's own pages are served
+by Inertia from `routes/web.php` and do not go through these endpoints.
 
 ```
 POST   /api/v1/auth/login
