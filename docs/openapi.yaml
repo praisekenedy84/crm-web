@@ -29,6 +29,28 @@ paths:
       summary: Convert lead
       tags: [Leads]
       security: [{ bearerAuth: [] }]
+  /contacts/{id}/leads:
+    post:
+      summary: Create a lead from an existing contact
+      description: Copies name, email, phone, and company from the contact and links the lead via source_contact_id.
+      tags: [Leads]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                source: { type: string, nullable: true }
+                company: { type: string, nullable: true }
+                campaign: { type: string, nullable: true }
+                owner_id: { type: integer, nullable: true }
+      responses:
+        "201":
+          description: Lead created from contact
   /deals:
     get:
       summary: List deals
@@ -125,6 +147,24 @@ paths:
       summary: Analytics overview
       tags: [Analytics]
       security: [{ bearerAuth: [] }]
+  /analytics/audit-logs:
+    get:
+      summary: Audit logs
+      description: Workspace change history. Separate from sales analytics.
+      tags: [Audit]
+      security: [{ bearerAuth: [] }]
+  /reports/sales-done:
+    get:
+      summary: Sales done (won deals) in a date range
+      tags: [Reports]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: owner_id, in: query, schema: { type: integer, nullable: true } }
+      responses:
+        "200":
+          description: Won deals closed in range with totals
   /marketing/content-items:
     get:
       summary: List scheduled social content and submitted ideas

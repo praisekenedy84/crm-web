@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
-import { api, type Expense } from '../lib/api';
+import { useSubmit } from '@/lib/submit';
+import type { Expense, ExpenseCategory, Paginated } from '@/types';
 import { PageHeader } from '@/Components/PageHeader';
 import { FormCard, FormField, FormGrid, FormSection } from '@/Components/forms';
 import { DeleteConfirmDialog } from '@/Components/DeleteConfirmDialog';
@@ -15,7 +15,6 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/Components/ui/table';
-import { Skeleton } from '@/Components/ui/skeleton';
 
 function expenseDate(e: Expense) {
   return e.expensed_at ?? e.expense_date ?? '';
@@ -28,22 +27,17 @@ const emptyForm = {
   expense_date: new Date().toISOString().slice(0, 10),
 };
 
-export default function ExpensesPage() {
-  const queryClient = useQueryClient();
+interface ExpensesPageProps {
+  expenses: Paginated<Expense>;
+  categories: ExpenseCategory[];
+}
+
+export default function ExpensesPage({ expenses, categories }: ExpensesPageProps) {
+  const { processing, submit } = useSubmit();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null);
   const [form, setForm] = useState(emptyForm);
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['expenses'],
-    queryFn: () => api.getExpenses(),
-  });
-
-  const { data: categories } = useQuery({
-    queryKey: ['expense-categories'],
-    queryFn: () => api.getExpenseCategories(),
-  });
 
   const resetForm = () =>
     setForm({
@@ -76,31 +70,26 @@ export default function ExpensesPage() {
     });
   };
 
-  const saveMutation = useMutation({
-    mutationFn: () => {
-      const payload = {
-        expense_category_id: Number(form.expense_category_id),
-        amount: Number(form.amount),
-        description: form.description || undefined,
-        expensed_at: form.expense_date,
-      };
-      return editing
-        ? api.updateExpense(editing.id, payload)
-        : api.createExpense(payload);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      closeForm();
-    },
-  });
+  const handleSave = () => {
+    const payload = {
+      expense_category_id: Number(form.expense_category_id),
+      amount: Number(form.amount),
+      description: form.description || undefined,
+      expensed_at: form.expense_date,
+    };
+    if (editing) {
+      submit('put', `/expenses/${editing.id}`, payload, { onSuccess: closeForm });
+    } else {
+      submit('post', '/expenses', payload, { onSuccess: closeForm });
+    }
+  };
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => api.deleteExpense(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      setDeleteTarget(null);
-    },
-  });
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    submit('delete', `/expenses/${deleteTarget.id}`, {}, {
+      onSuccess: () => setDeleteTarget(null),
+    });
+  };
 
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'TZS', maximumFractionDigits: 0 }).format(n);
@@ -128,10 +117,10 @@ export default function ExpensesPage() {
           onClose={closeForm}
           onSubmit={(e) => {
             e.preventDefault();
-            saveMutation.mutate();
+            handleSave();
           }}
           submitLabel={editing ? 'Update Expense' : 'Submit Expense'}
-          isSubmitting={saveMutation.isPending}
+          isSubmitting={processing}
         >
           <FormSection title="Expense Details">
             <FormGrid cols={2}>
@@ -139,12 +128,13 @@ export default function ExpensesPage() {
                 <Select
                   value={form.expense_category_id}
                   onValueChange={(value) => value && setForm({ ...form, expense_category_id: value })}
+                  items={categories.map((c) => ({ value: String(c.id), label: c.name }))}
                 >
                   <SelectTrigger id="expense_category" className="w-full">
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
-                    {categories?.data.map((c) => (
+                    {categories.map((c) => (
                       <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -197,17 +187,11 @@ export default function ExpensesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center">
-                    <Skeleton className="mx-auto h-4 w-24" />
-                  </TableCell>
-                </TableRow>
-              ) : data?.data.map((e) => (
+              {expenses.data.map((e) => (
                 <TableRow key={e.id}>
                   <TableCell className="text-muted-foreground">{expenseDate(e)}</TableCell>
-                  <TableCell>{e.category?.name ?? 'â€”'}</TableCell>
-                  <TableCell className="text-muted-foreground">{e.description || 'â€”'}</TableCell>
+                  <TableCell>{e.category?.name ?? '-'}</TableCell>
+                  <TableCell className="text-muted-foreground">{e.description || '-'}</TableCell>
                   <TableCell className="font-medium">{fmt(e.amount)}</TableCell>
                   <TableCell className="capitalize text-muted-foreground">{e.status}</TableCell>
                   <TableCell>
@@ -228,9 +212,9 @@ export default function ExpensesPage() {
       <DeleteConfirmDialog
         open={deleteTarget !== null}
         title="Delete expense?"
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
-        isDeleting={deleteMutation.isPending}
+        isDeleting={processing}
       />
     </div>
   );

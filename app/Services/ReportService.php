@@ -2,11 +2,16 @@
 
 namespace App\Services;
 
+use App\Enums\ActivityType;
+use App\Enums\AreaLevel;
 use App\Enums\LeadStatus;
+use App\Models\Activity;
+use App\Models\Area;
 use App\Models\Deal;
 use App\Models\Lead;
 use App\Models\PipelineStage;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -111,5 +116,166 @@ class ReportService
             ->values();
 
         return ['leaderboard' => $reps];
+    }
+
+    public function visitsByArea(string $from, string $to, ?AreaLevel $level = null, ?int $ownerId = null): array
+    {
+        $aggregateLevel = $level ?? AreaLevel::Street;
+        $areas = Area::all()->keyBy('id');
+        $areaRollupMap = $this->buildAreaRollupMap($areas, $aggregateLevel);
+
+        $query = Activity::query()
+            ->where('type', ActivityType::FieldVisit)
+            ->whereBetween('occurred_at', [
+                Carbon::parse($from)->startOfDay(),
+                Carbon::parse($to)->endOfDay(),
+            ])
+            ->whereNotNull('area_id');
+
+        if ($ownerId) {
+            $query->where('owner_id', $ownerId);
+        }
+
+        $visits = $query
+            ->select('area_id', 'owner_id', DB::raw('COUNT(*) as visit_count'))
+            ->groupBy('area_id', 'owner_id')
+            ->get();
+
+        $users = User::query()->whereIn('id', $visits->pluck('owner_id')->unique())->get()->keyBy('id');
+        $aggregated = [];
+
+        foreach ($visits as $visit) {
+            $rollupAreaId = $areaRollupMap[$visit->area_id] ?? $visit->area_id;
+            $key = "{$rollupAreaId}:{$visit->owner_id}";
+
+            if (! isset($aggregated[$key])) {
+                $aggregated[$key] = [
+                    'area_id' => $rollupAreaId,
+                    'area_name' => $areas->get($rollupAreaId)?->name ?? 'Unknown',
+                    'owner_id' => $visit->owner_id,
+                    'owner_name' => $users->get($visit->owner_id)?->name ?? 'Unknown',
+                    'visit_count' => 0,
+                ];
+            }
+
+            $aggregated[$key]['visit_count'] += (int) $visit->visit_count;
+        }
+
+        return [
+            'period' => ['from' => $from, 'to' => $to],
+            'level' => $aggregateLevel->value,
+            'visits' => array_values($aggregated),
+        ];
+    }
+
+    public function leadsPerRepPerDay(string $from, string $to, ?int $ownerId = null): array
+    {
+        $query = Lead::query()
+            ->whereBetween('created_at', [
+                Carbon::parse($from)->startOfDay(),
+                Carbon::parse($to)->endOfDay(),
+            ]);
+
+        if ($ownerId) {
+            $query->where('owner_id', $ownerId);
+        }
+
+        $rows = $query
+            ->select(
+                'owner_id',
+                DB::raw('DATE(created_at) as date'),
+                DB::raw('COUNT(*) as lead_count'),
+            )
+            ->groupBy('owner_id', DB::raw('DATE(created_at)'))
+            ->orderBy('date')
+            ->get();
+
+        $users = User::query()->whereIn('id', $rows->pluck('owner_id')->unique())->get()->keyBy('id');
+
+        $report = $rows->map(fn ($row) => [
+            'owner_id' => $row->owner_id,
+            'owner_name' => $users->get($row->owner_id)?->name ?? 'Unassigned',
+            'date' => $row->date,
+            'lead_count' => (int) $row->lead_count,
+        ]);
+
+        return [
+            'period' => ['from' => $from, 'to' => $to],
+            'leads' => $report->values(),
+        ];
+    }
+
+    public function salesDone(string $from, string $to, ?int $ownerId = null): array
+    {
+        $query = Deal::query()
+            ->with(['owner', 'account', 'contact', 'lineItems.product', 'lineItems.service'])
+            ->where('status', 'won')
+            ->whereNotNull('closed_at')
+            ->whereBetween('closed_at', [
+                Carbon::parse($from)->startOfDay(),
+                Carbon::parse($to)->endOfDay(),
+            ])
+            ->orderByDesc('closed_at');
+
+        if ($ownerId) {
+            $query->where('owner_id', $ownerId);
+        }
+
+        $deals = $query->get();
+
+        $sales = $deals->map(fn (Deal $deal) => [
+            'id' => $deal->id,
+            'name' => $deal->name,
+            'value' => (float) $deal->value,
+            'currency' => $deal->currency,
+            'closed_at' => $deal->closed_at?->toDateString(),
+            'owner_id' => $deal->owner_id,
+            'owner_name' => $deal->owner?->name ?? 'Unassigned',
+            'account_name' => $deal->account?->name,
+            'contact_name' => $deal->contact
+                ? trim("{$deal->contact->first_name} {$deal->contact->last_name}")
+                : null,
+            'lines' => $deal->lineItems->map(fn ($line) => [
+                'id' => $line->id,
+                'description' => $line->description,
+                'quantity' => (float) $line->quantity,
+                'unit_price' => (float) $line->unit_price,
+                'total' => (float) $line->total,
+                'product_id' => $line->product_id,
+                'product_name' => $line->product?->name,
+                'service_id' => $line->service_id,
+                'service_name' => $line->service?->name,
+            ])->values(),
+        ])->values();
+
+        return [
+            'period' => ['from' => $from, 'to' => $to],
+            'totals' => [
+                'deal_count' => $sales->count(),
+                'revenue' => (float) $sales->sum('value'),
+            ],
+            'sales' => $sales,
+        ];
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Area>  $areas
+     * @return array<int, int>
+     */
+    private function buildAreaRollupMap($areas, AreaLevel $targetLevel): array
+    {
+        $map = [];
+
+        foreach ($areas as $area) {
+            $current = $area;
+
+            while ($current && $current->level !== $targetLevel) {
+                $current = $current->parent_area_id ? $areas->get($current->parent_area_id) : null;
+            }
+
+            $map[$area->id] = $current?->id ?? $area->id;
+        }
+
+        return $map;
     }
 }

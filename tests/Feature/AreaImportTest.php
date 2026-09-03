@@ -5,8 +5,10 @@ namespace Tests\Feature;
 use App\Models\Area;
 use App\Models\Tenant;
 use App\Models\User;
+use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 class AreaImportTest extends TestCase
@@ -19,6 +21,9 @@ class AreaImportTest extends TestCase
     {
         parent::setUp();
 
+        $this->seed(PermissionSeeder::class);
+        app()[PermissionRegistrar::class]->forgetCachedPermissions();
+
         $tenant = Tenant::create([
             'name' => 'Test Tenant',
             'slug' => 'test-tenant',
@@ -28,7 +33,7 @@ class AreaImportTest extends TestCase
         $this->user = User::factory()->create([
             'tenant_id' => $tenant->id,
             'role' => 'admin',
-        ]);
+        ])->syncPrimaryRole('admin');
 
         Sanctum::actingAs($this->user);
     }

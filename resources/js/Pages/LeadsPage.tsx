@@ -1,7 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Plus, ArrowRightCircle, X } from 'lucide-react';
-import { api, getApiErrorMessage, type Lead } from '../lib/api';
+import { useSubmit, visitFilters } from '@/lib/submit';
+import { useCan } from '@/hooks/useCan';
+import type { Contact, Lead, Paginated } from '@/types';
 import { PageHeader } from '@/Components/PageHeader';
 import { FormCard, FormField, FormGrid, FormSection } from '@/Components/forms';
 import { DeleteConfirmDialog } from '@/Components/DeleteConfirmDialog';
@@ -11,13 +12,14 @@ import { Input } from '@/Components/ui/input';
 import { Badge } from '@/Components/ui/badge';
 import { Card, CardContent } from '@/Components/ui/card';
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/Components/ui/select';
+import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/Components/ui/table';
-import { Skeleton } from '@/Components/ui/skeleton';
 import { ListToolbar } from '@/Components/ListToolbar';
 import { DataPagination } from '@/Components/DataPagination';
 import { DataState } from '@/Components/DataState';
-import { useFeedback } from '@/Components/Feedback';
 
 const statusVariant: Record<string, 'default' | 'secondary' | 'outline' | 'destructive'> = {
   new: 'default',
@@ -31,25 +33,28 @@ const emptyForm = {
   first_name: '',
   last_name: '',
   email: '',
+  phone: '',
   company: '',
   source: '',
+  source_contact_id: '' as string,
 };
 
-export default function LeadsPage() {
-  const queryClient = useQueryClient();
-  const { notify } = useFeedback();
+interface LeadsPageProps {
+  leads: Paginated<Lead>;
+  contacts: Contact[];
+  filters: { search: string };
+}
+
+export default function LeadsPage({ leads, contacts = [], filters }: LeadsPageProps) {
+  const { processing, submit } = useSubmit();
+  const { can } = useCan();
+  const canCreate = can('leads.create');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Lead | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null);
   const [form, setForm] = useState(emptyForm);
-  const [page, setPage] = useState(1);
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
-
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['leads', page, search],
-    queryFn: () => api.getLeads({ page: String(page), ...(search ? { search } : {}) }),
-  });
+  const [searchInput, setSearchInput] = useState(filters.search);
+  const [convertingId, setConvertingId] = useState<number | null>(null);
 
   const resetForm = () => setForm(emptyForm);
 
@@ -72,44 +77,68 @@ export default function LeadsPage() {
       first_name: lead.first_name,
       last_name: lead.last_name,
       email: lead.email ?? '',
+      phone: lead.phone ?? '',
       company: lead.company ?? '',
       source: lead.source ?? '',
+      source_contact_id: lead.source_contact_id ? String(lead.source_contact_id) : '',
     });
   };
 
-  const saveMutation = useMutation({
-    mutationFn: () =>
-      editing
-        ? api.updateLead(editing.id, form)
-        : api.createLead(form),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-      notify(editing ? 'Lead updated.' : 'Lead created.');
-      closeForm();
-    },
-    onError: (error) => notify(getApiErrorMessage(error, 'Lead could not be saved.'), 'error'),
-  });
+  const applyContact = (contactId: string) => {
+    if (!contactId) {
+      setForm({ ...form, source_contact_id: '' });
+      return;
+    }
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => api.deleteLead(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-      notify('Lead deleted.');
-      setDeleteTarget(null);
-    },
-    onError: (error) => notify(getApiErrorMessage(error, 'Lead could not be deleted.'), 'error'),
-  });
+    const contact = contacts.find((c) => String(c.id) === contactId);
+    if (!contact) return;
 
-  const convertMutation = useMutation({
-    mutationFn: (id: number) => api.convertLead(id, { create_account: true, create_deal: true }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-      queryClient.invalidateQueries({ queryKey: ['contacts'] });
-      queryClient.invalidateQueries({ queryKey: ['deals-kanban'] });
-      notify('Lead converted to a contact and deal.');
-    },
-    onError: (error) => notify(getApiErrorMessage(error, 'Lead could not be converted.'), 'error'),
-  });
+    setForm({
+      ...form,
+      source_contact_id: contactId,
+      first_name: contact.first_name,
+      last_name: contact.last_name,
+      email: contact.email ?? '',
+      phone: contact.phone ?? '',
+      company: contact.account?.name ?? form.company,
+      source: form.source || 'Contact',
+    });
+  };
+
+  const handleSave = () => {
+    const payload = {
+      first_name: form.first_name,
+      last_name: form.last_name,
+      email: form.email || undefined,
+      phone: form.phone || undefined,
+      company: form.company || undefined,
+      source: form.source || undefined,
+      ...(editing ? {} : {
+        source_contact_id: form.source_contact_id ? Number(form.source_contact_id) : undefined,
+      }),
+    };
+
+    if (editing) {
+      submit('put', `/leads/${editing.id}`, payload, { onSuccess: closeForm });
+    } else {
+      submit('post', '/leads', payload, { onSuccess: closeForm });
+    }
+  };
+
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    submit('delete', `/leads/${deleteTarget.id}`, {}, {
+      onSuccess: () => setDeleteTarget(null),
+    });
+  };
+
+  const handleConvert = (id: number) => {
+    setConvertingId(id);
+    submit('post', `/leads/${id}/convert`, {}, {
+      onSuccess: () => setConvertingId(null),
+      onError: () => setConvertingId(null),
+    });
+  };
 
   const isFormOpen = showForm || editing !== null;
 
@@ -120,25 +149,61 @@ export default function LeadsPage() {
         title="Leads"
         description="Qualify new interest, understand its source, and move the right prospects forward."
         action={
-          <Button variant={isFormOpen ? 'outline' : 'default'} onClick={() => (isFormOpen ? closeForm() : openCreate())}>
-            {isFormOpen ? <X size={16} /> : <Plus size={16} />}
-            {isFormOpen ? 'Close form' : 'New lead'}
-          </Button>
+          (canCreate || isFormOpen) && (
+            <Button variant={isFormOpen ? 'outline' : 'default'} onClick={() => (isFormOpen ? closeForm() : openCreate())}>
+              {isFormOpen ? <X size={16} /> : <Plus size={16} />}
+              {isFormOpen ? 'Close form' : 'New lead'}
+            </Button>
+          )
         }
       />
 
       {isFormOpen && (
         <FormCard
           title={editing ? 'Edit Lead' : 'Add Lead'}
-          description={editing ? 'Update prospect details.' : 'Capture a new prospect before qualification.'}
+          description={editing ? 'Update prospect details.' : 'Capture a new prospect, or pull details from an existing contact.'}
           onClose={closeForm}
           onSubmit={(e) => {
             e.preventDefault();
-            saveMutation.mutate();
+            handleSave();
           }}
           submitLabel={editing ? 'Update Lead' : 'Save Lead'}
-          isSubmitting={saveMutation.isPending}
+          isSubmitting={processing}
         >
+          {!editing && contacts.length > 0 && (
+            <FormSection title="From Contact">
+              <FormGrid cols={1}>
+                <FormField
+                  label="Existing contact"
+                  htmlFor="lead_source_contact"
+                  hint="Select a contact to fill name, email, phone, and company"
+                >
+                  <Select
+                    value={form.source_contact_id}
+                    onValueChange={(value) => applyContact(value ?? '')}
+                    items={contacts.map((c) => ({
+                      value: String(c.id),
+                      label: `${c.first_name} ${c.last_name}${c.email ? ` (${c.email})` : ''}${c.account?.name ? ` - ${c.account.name}` : ''}`,
+                    }))}
+                  >
+                    <SelectTrigger id="lead_source_contact" className="w-full">
+                      <SelectValue placeholder="Optional - pick a contact" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {contacts.map((c) => (
+                        <SelectItem key={c.id} value={String(c.id)}>
+                          {c.first_name} {c.last_name}
+                          {c.email ? ` (${c.email})` : ''}
+                          {c.account?.name ? ` - ${c.account.name}` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormField>
+              </FormGrid>
+            </FormSection>
+          )}
+
           <FormSection title="Prospect Details">
             <FormGrid cols={2}>
               <FormField label="First name" htmlFor="lead_first_name" required>
@@ -166,6 +231,14 @@ export default function LeadsPage() {
                   placeholder="jane@company.com"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
+                />
+              </FormField>
+              <FormField label="Phone" htmlFor="lead_phone">
+                <Input
+                  id="lead_phone"
+                  placeholder="+1 555 000 0000"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 />
               </FormField>
               <FormField label="Company" htmlFor="lead_company">
@@ -199,23 +272,13 @@ export default function LeadsPage() {
           value={searchInput}
           onChange={setSearchInput}
           onSearch={(value = searchInput) => {
-            setSearch(value.trim());
-            setPage(1);
+            visitFilters('/leads', { search: value.trim(), page: 1 });
           }}
           placeholder="Search by name or company"
-          resultLabel={data ? `${data.total} lead${data.total === 1 ? '' : 's'}` : undefined}
+          resultLabel={`${leads.total} lead${leads.total === 1 ? '' : 's'}`}
         />
         <CardContent className="p-0">
-          {isError ? (
-            <DataState
-              tone="error"
-              title="Leads could not be loaded"
-              description="Check your connection and try loading the lead list again."
-              actionLabel="Try again"
-              onAction={() => refetch()}
-            />
-          ) : (
-            <Table>
+          <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -227,29 +290,25 @@ export default function LeadsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center">
-                    <Skeleton className="mx-auto h-4 w-24" />
-                  </TableCell>
-                </TableRow>
-              ) : data?.data.length === 0 ? (
+              {leads.data.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="p-0">
                     <DataState
                       compact
-                      title={search ? 'No leads match this search' : 'No leads yet'}
-                      description={search ? 'Try another name or company.' : 'Capture your first prospect to begin qualification.'}
-                      actionLabel={search ? 'Clear search' : 'Create lead'}
-                      onAction={() => search ? (setSearch(''), setSearchInput(''), setPage(1)) : openCreate()}
+                      title={filters.search ? 'No leads match this search' : 'No leads yet'}
+                      description={filters.search ? 'Try another name or company.' : 'Capture your first prospect to begin qualification.'}
+                      actionLabel={filters.search ? 'Clear search' : 'Create lead'}
+                      onAction={() => filters.search
+                        ? (setSearchInput(''), visitFilters('/leads', { search: '', page: 1 }))
+                        : openCreate()}
                     />
                   </TableCell>
                 </TableRow>
-              ) : data?.data.map((lead) => (
+              ) : leads.data.map((lead) => (
                 <TableRow key={lead.id}>
                   <TableCell className="font-medium">{lead.first_name} {lead.last_name}</TableCell>
-                  <TableCell>{lead.company || 'â€”'}</TableCell>
-                  <TableCell>{lead.source || 'â€”'}</TableCell>
+                  <TableCell>{lead.company || '-'}</TableCell>
+                  <TableCell>{lead.source || '-'}</TableCell>
                   <TableCell>
                     <Badge variant="secondary">{lead.score ?? 0}</Badge>
                   </TableCell>
@@ -269,12 +328,12 @@ export default function LeadsPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => convertMutation.mutate(lead.id)}
-                            disabled={convertMutation.isPending}
-                            aria-busy={convertMutation.isPending && convertMutation.variables === lead.id}
+                            onClick={() => handleConvert(lead.id)}
+                            disabled={convertingId !== null}
+                            aria-busy={convertingId === lead.id}
                           >
                             <ArrowRightCircle size={16} />
-                            {convertMutation.isPending && convertMutation.variables === lead.id ? 'Converting...' : 'Convert'}
+                            {convertingId === lead.id ? 'Converting...' : 'Convert'}
                           </Button>
                         ) : undefined
                       }
@@ -283,18 +342,22 @@ export default function LeadsPage() {
                 </TableRow>
               ))}
             </TableBody>
-            </Table>
-          )}
+          </Table>
         </CardContent>
-        {data && <DataPagination page={data.current_page} lastPage={data.last_page} total={data.total} onPageChange={setPage} />}
+        <DataPagination
+          page={leads.current_page}
+          lastPage={leads.last_page}
+          total={leads.total}
+          onPageChange={(page) => visitFilters('/leads', { search: filters.search, page })}
+        />
       </Card>
 
       <DeleteConfirmDialog
         open={deleteTarget !== null}
         title={`Delete ${deleteTarget?.first_name} ${deleteTarget?.last_name}?`}
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
-        isDeleting={deleteMutation.isPending}
+        isDeleting={processing}
       />
     </div>
   );

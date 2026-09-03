@@ -24,6 +24,7 @@ class Lead extends Model
         'status',
         'score',
         'owner_id',
+        'source_contact_id',
         'converted_at',
         'converted_contact_id',
         'converted_account_id',
@@ -43,6 +44,11 @@ class Lead extends Model
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'owner_id');
+    }
+
+    public function sourceContact(): BelongsTo
+    {
+        return $this->belongsTo(Contact::class, 'source_contact_id');
     }
 
     public function convertedContact(): BelongsTo

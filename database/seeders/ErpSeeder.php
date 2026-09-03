@@ -52,11 +52,14 @@ class ErpSeeder extends Seeder
 
     private function seedDarEsSalaamAreas(): void
     {
-        $region = Area::create([
-            'name' => 'Dar es Salaam',
-            'level' => AreaLevel::Region,
-            'is_custom' => false,
-        ]);
+        $region = Area::query()->firstOrCreate(
+            [
+                'name' => 'Dar es Salaam',
+                'level' => AreaLevel::Region,
+                'parent_area_id' => null,
+            ],
+            ['is_custom' => false],
+        );
 
         $districts = [
             'Kinondoni' => ['Sinza A', 'Sinza B', 'Sinza C', 'Mikocheni', 'Kinondoni', 'Msasani', 'Mwenge'],
@@ -66,20 +69,24 @@ class ErpSeeder extends Seeder
         ];
 
         foreach ($districts as $districtName => $wards) {
-            $district = Area::create([
-                'name' => $districtName,
-                'level' => AreaLevel::District,
-                'parent_area_id' => $region->id,
-                'is_custom' => false,
-            ]);
+            $district = Area::query()->firstOrCreate(
+                [
+                    'name' => $districtName,
+                    'level' => AreaLevel::District,
+                    'parent_area_id' => $region->id,
+                ],
+                ['is_custom' => false],
+            );
 
             foreach ($wards as $wardName) {
-                Area::create([
-                    'name' => $wardName,
-                    'level' => AreaLevel::Ward,
-                    'parent_area_id' => $district->id,
-                    'is_custom' => false,
-                ]);
+                Area::query()->firstOrCreate(
+                    [
+                        'name' => $wardName,
+                        'level' => AreaLevel::Ward,
+                        'parent_area_id' => $district->id,
+                    ],
+                    ['is_custom' => false],
+                );
             }
         }
     }
@@ -101,13 +108,17 @@ class ErpSeeder extends Seeder
         TenantContext::clear();
 
         foreach ($holidays as $holiday) {
-            PublicHoliday::query()->create([
-                'tenant_id' => null,
-                'name' => $holiday['name'],
-                'date' => now()->setMonth($holiday['month'])->setDay($holiday['day'])->toDateString(),
-                'region' => 'Tanzania',
-                'is_recurring_annually' => true,
-            ]);
+            $date = now()->setMonth($holiday['month'])->setDay($holiday['day'])->toDateString();
+
+            PublicHoliday::query()->firstOrCreate(
+                [
+                    'tenant_id' => null,
+                    'name' => $holiday['name'],
+                    'date' => $date,
+                    'region' => 'Tanzania',
+                ],
+                ['is_recurring_annually' => true],
+            );
         }
 
         TenantContext::set(Tenant::query()->where('slug', 'demo')->firstOrFail());
@@ -115,23 +126,27 @@ class ErpSeeder extends Seeder
 
     private function seedLeaveTypes(): void
     {
-        LeaveType::create([
-            'name' => 'Annual Leave',
-            'default_days_per_year' => 28,
-            'is_paid' => true,
-        ]);
+        LeaveType::query()->firstOrCreate(
+            ['name' => 'Annual Leave'],
+            [
+                'default_days_per_year' => 28,
+                'is_paid' => true,
+            ],
+        );
 
-        LeaveType::create([
-            'name' => 'Sick Leave',
-            'default_days_per_year' => 10,
-            'is_paid' => true,
-        ]);
+        LeaveType::query()->firstOrCreate(
+            ['name' => 'Sick Leave'],
+            [
+                'default_days_per_year' => 10,
+                'is_paid' => true,
+            ],
+        );
     }
 
     private function seedExpenseCategories(): void
     {
         foreach (['Office Supplies', 'Utilities', 'Transport', 'Rent'] as $name) {
-            ExpenseCategory::create(['name' => $name]);
+            ExpenseCategory::query()->firstOrCreate(['name' => $name]);
         }
     }
 
@@ -151,57 +166,75 @@ class ErpSeeder extends Seeder
         ];
 
         foreach ($accounts as $account) {
-            ChartOfAccount::create([
-                ...$account,
-                'is_active' => true,
-            ]);
+            ChartOfAccount::query()->firstOrCreate(
+                ['code' => $account['code']],
+                [
+                    'name' => $account['name'],
+                    'type' => $account['type'],
+                    'is_active' => true,
+                ],
+            );
         }
     }
 
     private function seedSampleService(): void
     {
-        Service::create([
-            'name' => 'Enterprise Software License',
-            'description' => 'Full-featured enterprise CRM and ERP subscription.',
-            'price' => 2500,
-            'currency' => 'TZS',
-            'billing_cycle' => BillingCycle::Monthly,
-            'is_active' => true,
-        ]);
+        Service::query()->firstOrCreate(
+            ['name' => 'Enterprise Software License'],
+            [
+                'description' => 'Full-featured enterprise CRM and ERP subscription.',
+                'price' => 2500,
+                'currency' => 'TZS',
+                'billing_cycle' => BillingCycle::Monthly,
+                'is_active' => true,
+            ],
+        );
     }
 
     private function seedSampleEmployee(): void
     {
         $rep = User::query()->where('email', 'rep@demo.com')->firstOrFail();
 
-        $party = Party::create([
-            'type' => PartyType::Employee,
-            'name' => $rep->name,
-            'email' => $rep->email,
-        ]);
+        $party = Party::query()->firstOrCreate(
+            [
+                'email' => $rep->email,
+                'type' => PartyType::Employee,
+            ],
+            ['name' => $rep->name],
+        );
 
-        Employee::create([
-            'party_id' => $party->id,
-            'user_id' => $rep->id,
-            'department' => 'Sales',
-            'job_title' => 'Sales Representative',
-            'employment_status' => 'active',
-            'hire_date' => now()->subYear()->toDateString(),
-            'salary' => 1200,
-            'currency' => 'TZS',
-        ]);
+        Employee::query()->firstOrCreate(
+            ['user_id' => $rep->id],
+            [
+                'party_id' => $party->id,
+                'department' => 'Sales',
+                'job_title' => 'Sales Representative',
+                'employment_status' => 'active',
+                'hire_date' => now()->subYear()->toDateString(),
+                'salary' => 1200,
+                'currency' => 'TZS',
+            ],
+        );
     }
 
     private function updateDemoContact(): void
     {
         $contact = Contact::query()
             ->where('email', 'jane.doe@acme.example.com')
-            ->firstOrFail();
+            ->first();
+
+        if (! $contact) {
+            return;
+        }
 
         $area = Area::query()
             ->where('name', 'Sinza A')
             ->where('level', AreaLevel::Ward)
-            ->firstOrFail();
+            ->first();
+
+        if (! $area) {
+            return;
+        }
 
         $contact->update([
             'status' => ContactStatus::Inquiry,

@@ -60,7 +60,7 @@ export function CloseDealDialog({
           <Flag className="size-5" />
         </div>
         <h2 id={titleId} className="font-heading text-xl font-semibold tracking-tight">
-          Move â€œ{dealName}â€ to {stageName}?
+          Move "{dealName}" to {stageName}?
         </h2>
         <p id={descriptionId} className="mt-2 text-sm leading-6 text-muted-foreground">
           Closed deals need a short outcome note so the team can learn from the result.

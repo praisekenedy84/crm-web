@@ -70,6 +70,11 @@ class Deal extends Model
         return $this->hasMany(DealStageHistory::class)->orderByDesc('changed_at');
     }
 
+    public function lineItems(): HasMany
+    {
+        return $this->hasMany(DealLineItem::class)->orderBy('sort_order')->orderBy('id');
+    }
+
     public function salesOrders(): HasMany
     {
         return $this->hasMany(SalesOrder::class);

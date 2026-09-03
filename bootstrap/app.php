@@ -22,6 +22,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => CheckRole::class,
             'auth.api' => AuthenticateApiKey::class,
             'module' => EnsureModuleEnabled::class,
+            'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+            'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
         ]);
 
         $middleware->api(prepend: [

@@ -5,8 +5,10 @@ namespace Tests\Feature;
 use App\Models\MarketingContentItem;
 use App\Models\Tenant;
 use App\Models\User;
+use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 class MarketingContentItemTest extends TestCase
@@ -23,6 +25,9 @@ class MarketingContentItemTest extends TestCase
     {
         parent::setUp();
 
+        $this->seed(PermissionSeeder::class);
+        app()[PermissionRegistrar::class]->forgetCachedPermissions();
+
         $this->tenant = Tenant::create([
             'name' => 'Northstar',
             'slug' => 'northstar',
@@ -32,23 +37,23 @@ class MarketingContentItemTest extends TestCase
             'tenant_id' => $this->tenant->id,
             'role' => 'manager',
             'status' => 'active',
-        ]);
+        ])->syncPrimaryRole('manager');
 
         $this->rep = User::factory()->create([
             'tenant_id' => $this->tenant->id,
             'role' => 'rep',
             'status' => 'active',
-        ]);
+        ])->syncPrimaryRole('rep');
     }
 
-    public function test_every_authenticated_role_can_submit_an_idea(): void
+    public function test_creators_can_submit_an_idea(): void
     {
-        foreach (['rep', 'support', 'readonly'] as $role) {
+        foreach (['rep', 'support'] as $role) {
             $user = User::factory()->create([
                 'tenant_id' => $this->tenant->id,
                 'role' => $role,
                 'status' => 'active',
-            ]);
+            ])->syncPrimaryRole($role);
             Sanctum::actingAs($user);
 
             $this->postJson('/api/v1/marketing/content-items', [
@@ -66,7 +71,7 @@ class MarketingContentItemTest extends TestCase
                 ->assertJsonPath('submitter.id', $user->id);
         }
 
-        $this->assertSame(3, MarketingContentItem::withoutGlobalScopes()->count());
+        $this->assertSame(2, MarketingContentItem::withoutGlobalScopes()->count());
     }
 
     public function test_only_managers_and_admins_can_manage_content_items(): void
@@ -126,7 +131,7 @@ class MarketingContentItemTest extends TestCase
             'tenant_id' => $otherTenant->id,
             'role' => 'manager',
             'status' => 'active',
-        ]);
+        ])->syncPrimaryRole('manager');
 
         Sanctum::actingAs($otherManager);
         $this->getJson('/api/v1/marketing/content-items')

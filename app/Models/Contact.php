@@ -63,6 +63,11 @@ class Contact extends Model
         return $this->hasMany(Deal::class);
     }
 
+    public function sourcedLeads(): HasMany
+    {
+        return $this->hasMany(Lead::class, 'source_contact_id');
+    }
+
     public function statusHistory(): HasMany
     {
         return $this->hasMany(ContactStatusHistory::class)->orderByDesc('changed_at');

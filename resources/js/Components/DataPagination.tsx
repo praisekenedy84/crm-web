@@ -24,7 +24,7 @@ export function DataPagination({
   return (
     <div className="flex flex-col gap-3 border-t border-border/70 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
       <p className="text-xs text-muted-foreground">
-        Showing <span className="font-semibold text-foreground">{first}â€“{last}</span> of{' '}
+        Showing <span className="font-semibold text-foreground">{first}-{last}</span> of{' '}
         <span className="font-semibold text-foreground">{total}</span>
       </p>
       <div className="flex items-center gap-2">

@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
-import { api, type Product, type PurchaseOrder } from '../lib/api';
+import { useSubmit, visitFilters } from '@/lib/submit';
+import type { Paginated, Product, PurchaseOrder, StockLevel } from '@/types';
 import { FormCard, FormField, FormGrid, FormSection } from '@/Components/forms';
 import { DeleteConfirmDialog } from '@/Components/DeleteConfirmDialog';
 import { ActionsTableHead, RowActions } from '@/Components/RowActions';
@@ -11,10 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/Components/ui/table';
-import { Skeleton } from '@/Components/ui/skeleton';
 import { cn } from '@/lib/utils';
-
-type Tab = 'products' | 'stock' | 'orders';
 
 const emptyProductForm = {
   sku: '',
@@ -23,32 +20,20 @@ const emptyProductForm = {
   is_active: true,
 };
 
-export default function InventoryPage() {
-  const queryClient = useQueryClient();
-  const [tab, setTab] = useState<Tab>('products');
+interface InventoryPageProps {
+  tab: string;
+  products: Paginated<Product>;
+  stock: Paginated<StockLevel>;
+  orders: Paginated<PurchaseOrder>;
+}
+
+export default function InventoryPage({ tab, products, stock, orders }: InventoryPageProps) {
+  const { processing, submit } = useSubmit();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
   const [deleteOrder, setDeleteOrder] = useState<PurchaseOrder | null>(null);
   const [form, setForm] = useState(emptyProductForm);
-
-  const { data: products, isLoading: productsLoading } = useQuery({
-    queryKey: ['products'],
-    queryFn: () => api.getProducts(),
-    enabled: tab === 'products',
-  });
-
-  const { data: stock, isLoading: stockLoading } = useQuery({
-    queryKey: ['stock-levels'],
-    queryFn: () => api.getStockLevels(),
-    enabled: tab === 'stock',
-  });
-
-  const { data: orders, isLoading: ordersLoading } = useQuery({
-    queryKey: ['purchase-orders'],
-    queryFn: () => api.getPurchaseOrders(),
-    enabled: tab === 'orders',
-  });
 
   const resetForm = () => setForm(emptyProductForm);
 
@@ -75,44 +60,37 @@ export default function InventoryPage() {
     });
   };
 
-  const saveProductMutation = useMutation({
-    mutationFn: () => {
-      const payload = {
-        sku: form.sku,
-        name: form.name,
-        unit_price: Number(form.unit_price),
-        is_active: form.is_active,
-      };
-      return editing
-        ? api.updateProduct(editing.id, payload)
-        : api.createProduct(payload);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      closeForm();
-    },
-  });
+  const handleSaveProduct = () => {
+    const payload = {
+      sku: form.sku,
+      name: form.name,
+      unit_price: Number(form.unit_price),
+      is_active: form.is_active,
+    };
+    if (editing) {
+      submit('put', `/inventory/products/${editing.id}`, payload, { onSuccess: closeForm });
+    } else {
+      submit('post', '/inventory/products', payload, { onSuccess: closeForm });
+    }
+  };
 
-  const deleteProductMutation = useMutation({
-    mutationFn: (id: number) => api.deleteProduct(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      setDeleteProduct(null);
-    },
-  });
+  const handleDeleteProduct = () => {
+    if (!deleteProduct) return;
+    submit('delete', `/inventory/products/${deleteProduct.id}`, {}, {
+      onSuccess: () => setDeleteProduct(null),
+    });
+  };
 
-  const deleteOrderMutation = useMutation({
-    mutationFn: (id: number) => api.deletePurchaseOrder(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
-      setDeleteOrder(null);
-    },
-  });
+  const handleDeleteOrder = () => {
+    if (!deleteOrder) return;
+    submit('delete', `/inventory/purchase-orders/${deleteOrder.id}`, {}, {
+      onSuccess: () => setDeleteOrder(null),
+    });
+  };
 
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'TZS', maximumFractionDigits: 0 }).format(n);
 
-  const isLoading = tab === 'products' ? productsLoading : tab === 'stock' ? stockLoading : ordersLoading;
   const isFormOpen = showForm || editing !== null;
 
   return (
@@ -137,10 +115,10 @@ export default function InventoryPage() {
           onClose={closeForm}
           onSubmit={(e) => {
             e.preventDefault();
-            saveProductMutation.mutate();
+            handleSaveProduct();
           }}
           submitLabel={editing ? 'Update Product' : 'Save Product'}
-          isSubmitting={saveProductMutation.isPending}
+          isSubmitting={processing}
         >
           <FormSection title="Product Details">
             <FormGrid cols={2}>
@@ -182,7 +160,7 @@ export default function InventoryPage() {
             variant={tab === t ? 'secondary' : 'outline'}
             size="sm"
             className="capitalize"
-            onClick={() => setTab(t)}
+            onClick={() => visitFilters('/inventory', { tab: t })}
           >
             {t === 'orders' ? 'Purchase Orders' : t === 'stock' ? 'Stock Levels' : 'Products'}
           </Button>
@@ -208,13 +186,7 @@ export default function InventoryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
-                      <Skeleton className="mx-auto h-4 w-24" />
-                    </TableCell>
-                  </TableRow>
-                ) : products?.data.map((p) => (
+                {products.data.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.sku}</TableCell>
                     <TableCell>{p.name}</TableCell>
@@ -242,13 +214,7 @@ export default function InventoryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={3} className="h-24 text-center">
-                      <Skeleton className="mx-auto h-4 w-24" />
-                    </TableCell>
-                  </TableRow>
-                ) : stock?.data.map((s) => (
+                {stock.data.map((s) => (
                   <TableRow key={s.id}>
                     <TableCell className="font-medium">{s.product?.name ?? `#${s.product_id}`}</TableCell>
                     <TableCell className="text-muted-foreground">{s.warehouse?.name ?? `#${s.warehouse_id}`}</TableCell>
@@ -271,13 +237,7 @@ export default function InventoryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
-                      <Skeleton className="mx-auto h-4 w-24" />
-                    </TableCell>
-                  </TableRow>
-                ) : orders?.data.map((o) => (
+                {orders.data.map((o) => (
                   <TableRow key={o.id}>
                     <TableCell className="font-medium">{o.po_number}</TableCell>
                     <TableCell className="text-muted-foreground">{o.order_date}</TableCell>
@@ -300,17 +260,17 @@ export default function InventoryPage() {
       <DeleteConfirmDialog
         open={deleteProduct !== null}
         title={`Delete ${deleteProduct?.name}?`}
-        onConfirm={() => deleteProduct && deleteProductMutation.mutate(deleteProduct.id)}
+        onConfirm={handleDeleteProduct}
         onCancel={() => setDeleteProduct(null)}
-        isDeleting={deleteProductMutation.isPending}
+        isDeleting={processing}
       />
 
       <DeleteConfirmDialog
         open={deleteOrder !== null}
         title={`Delete PO ${deleteOrder?.po_number}?`}
-        onConfirm={() => deleteOrder && deleteOrderMutation.mutate(deleteOrder.id)}
+        onConfirm={handleDeleteOrder}
         onCancel={() => setDeleteOrder(null)}
-        isDeleting={deleteOrderMutation.isPending}
+        isDeleting={processing}
       />
     </div>
   );

@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\Tenant;
 use App\Models\User;
+use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 /**
@@ -21,6 +23,9 @@ class SessionAuthTest extends TestCase
     {
         parent::setUp();
 
+        $this->seed(PermissionSeeder::class);
+        app()[PermissionRegistrar::class]->forgetCachedPermissions();
+
         $tenant = Tenant::create([
             'name' => 'Northstar',
             'slug' => 'northstar',
@@ -33,6 +38,7 @@ class SessionAuthTest extends TestCase
             'role' => 'admin',
             'status' => 'active',
         ]);
+        $this->user->syncPrimaryRole('admin');
     }
 
     public function test_valid_credentials_start_a_session_and_land_on_the_dashboard(): void

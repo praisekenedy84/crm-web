@@ -28,10 +28,15 @@ class UserController extends Controller
         ]);
 
         $user = User::create([
-            ...$data,
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'password' => $data['password'],
             'tenant_id' => $request->user()->tenant_id,
             'status' => 'active',
+            'role' => $data['role'],
         ]);
+
+        $user->syncPrimaryRole($data['role']);
 
         return response()->json($user, 201);
     }
@@ -52,9 +57,18 @@ class UserController extends Controller
             unset($data['password']);
         }
 
-        $user->update($data);
+        $role = $data['role'] ?? null;
+        unset($data['role']);
 
-        return response()->json($user);
+        if ($data !== []) {
+            $user->update($data);
+        }
+
+        if ($role !== null) {
+            $user->syncPrimaryRole($role);
+        }
+
+        return response()->json($user->fresh());
     }
 
     public function destroy(User $user): JsonResponse

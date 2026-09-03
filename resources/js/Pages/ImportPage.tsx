@@ -1,30 +1,16 @@
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
 import { Upload, Download } from 'lucide-react';
-import { api, getApiErrorMessage } from '../lib/api';
-import { csvRecords } from '../lib/csv';
+import { useSubmit } from '@/lib/submit';
+import { csvRecords } from '@/lib/csv';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Alert, AlertDescription } from '@/Components/ui/alert';
 
 export default function ImportPage() {
+  const { processing, submit } = useSubmit();
   const [contactResult, setContactResult] = useState('');
   const [areaResult, setAreaResult] = useState('');
-
-  const contactImportMutation = useMutation({
-    mutationFn: (records: Record<string, string>[]) => api.importContacts(records),
-    onSuccess: (data) => setContactResult(`Imported ${data.imported} contacts.`),
-    onError: (error) => setContactResult(getApiErrorMessage(error, 'Contacts could not be imported.')),
-  });
-
-  const areaImportMutation = useMutation({
-    mutationFn: (records: Record<string, string>[]) => api.importAreas(records),
-    onSuccess: (data) => {
-      setAreaResult(`Added ${data.created} territories from ${data.rows_processed} CSV rows.`);
-    },
-    onError: (error) => setAreaResult(getApiErrorMessage(error, 'Territories could not be imported.')),
-  });
 
   const handleContactFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -44,7 +30,10 @@ export default function ImportPage() {
       return;
     }
 
-    contactImportMutation.mutate(records);
+    submit('post', '/import/contacts', { records }, {
+      onSuccess: () => setContactResult(`Imported ${records.length} contacts.`),
+      onError: (message) => setContactResult(message),
+    });
   };
 
   const handleAreaFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -65,23 +54,10 @@ export default function ImportPage() {
       return;
     }
 
-    areaImportMutation.mutate(records);
-  };
-
-  const downloadContacts = async () => {
-    try {
-      await api.downloadContactsCsv();
-    } catch (error) {
-      setContactResult(getApiErrorMessage(error, 'Contacts could not be downloaded.'));
-    }
-  };
-
-  const downloadAreaTemplate = async () => {
-    try {
-      await api.downloadAreasTemplate();
-    } catch (error) {
-      setAreaResult(getApiErrorMessage(error, 'The territory template could not be downloaded.'));
-    }
+    submit('post', '/import/areas', { records }, {
+      onSuccess: () => setAreaResult(`Imported territories from ${records.length} CSV rows.`),
+      onError: (message) => setAreaResult(message),
+    });
   };
 
   return (
@@ -102,7 +78,7 @@ export default function ImportPage() {
               type="file"
               accept=".csv,text/csv"
               onChange={handleContactFile}
-              disabled={contactImportMutation.isPending}
+              disabled={processing}
               className="cursor-pointer"
             />
             {contactResult && (
@@ -121,7 +97,7 @@ export default function ImportPage() {
             <CardDescription>Download all contacts as CSV</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={downloadContacts}>
+            <Button onClick={() => { window.location.href = '/import/contacts/csv'; }}>
               Download CSV
             </Button>
           </CardContent>
@@ -137,7 +113,7 @@ export default function ImportPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button variant="outline" onClick={downloadAreaTemplate}>
+            <Button variant="outline" onClick={() => { window.location.href = '/import/areas/template'; }}>
               <Download size={16} />
               Download Template
             </Button>
@@ -145,7 +121,7 @@ export default function ImportPage() {
               type="file"
               accept=".csv,text/csv"
               onChange={handleAreaFile}
-              disabled={areaImportMutation.isPending}
+              disabled={processing}
               className="cursor-pointer"
             />
             {areaResult && (

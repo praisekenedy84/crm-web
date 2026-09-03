@@ -1,40 +1,52 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
 import {
   LayoutDashboard, Users, Building2, UserPlus, Kanban, CheckSquare,
-  LogOut, Settings, BarChart3, TrendingUp, Upload, Shield,
+  LogOut, Settings, BarChart3, TrendingUp, Upload, Shield, KeyRound,
   DollarSign, Package, Briefcase, FolderKanban, FileText, Receipt, MapPin,
-  Menu, X, ChevronsUpDown, CalendarDays,
+  Menu, X, ChevronsUpDown, CalendarDays, ScrollText,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Avatar, AvatarFallback } from '@/Components/ui/avatar';
+import { BrandLogo } from '@/Components/BrandLogo';
 import { cn } from '@/lib/utils';
+import { useCan } from '@/hooks/useCan';
 import type { SharedPageProps, SharedUser } from '@/types';
 
-const crmNavItems = [
+type NavDef = {
+  to: string;
+  label: string;
+  icon: React.ElementType;
+  module?: string;
+  /** Single permission, or any CRM view.* via resource */
+  permission?: string;
+  resource?: string;
+};
+
+const crmNavItems: NavDef[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/contacts', label: 'Contacts', icon: Users },
-  { to: '/accounts', label: 'Accounts', icon: Building2 },
-  { to: '/leads', label: 'Leads', icon: UserPlus },
-  { to: '/deals', label: 'Pipeline', icon: Kanban },
-  { to: '/tasks', label: 'Tasks', icon: CheckSquare },
-  { to: '/reports', label: 'Reports', icon: TrendingUp },
-  { to: '/analytics', label: 'Analytics', icon: BarChart3 },
-  { to: '/import', label: 'Import', icon: Upload },
+  { to: '/contacts', label: 'Contacts', icon: Users, resource: 'contacts' },
+  { to: '/accounts', label: 'Accounts', icon: Building2, resource: 'accounts' },
+  { to: '/leads', label: 'Leads', icon: UserPlus, resource: 'leads' },
+  { to: '/deals', label: 'Pipeline', icon: Kanban, resource: 'deals' },
+  { to: '/tasks', label: 'Tasks', icon: CheckSquare, resource: 'tasks' },
+  { to: '/reports', label: 'Reports', icon: TrendingUp, permission: 'reports.view' },
+  { to: '/analytics', label: 'Analytics', icon: BarChart3, permission: 'analytics.view' },
+  { to: '/import', label: 'Import', icon: Upload, permission: 'import.run' },
 ];
 
-const erpNavItems = [
-  { to: '/finance', label: 'Finance', icon: DollarSign, module: 'finance' },
-  { to: '/inventory', label: 'Inventory', icon: Package, module: 'inventory' },
-  { to: '/hr', label: 'People', icon: Briefcase, module: 'hr' },
-  { to: '/projects', label: 'Projects', icon: FolderKanban, module: 'projects' },
-  { to: '/contracts', label: 'Contracts', icon: FileText, module: 'finance' },
-  { to: '/expenses', label: 'Expenses', icon: Receipt, module: 'finance' },
-  { to: '/areas', label: 'Territories', icon: MapPin, module: 'crm' },
+const erpNavItems: NavDef[] = [
+  { to: '/finance', label: 'Finance', icon: DollarSign, module: 'finance', permission: 'finance.view' },
+  { to: '/inventory', label: 'Inventory', icon: Package, module: 'inventory', permission: 'inventory.view' },
+  { to: '/hr', label: 'People', icon: Briefcase, module: 'hr', permission: 'hr.view' },
+  { to: '/projects', label: 'Projects', icon: FolderKanban, module: 'projects', permission: 'projects.view' },
+  { to: '/contracts', label: 'Contracts', icon: FileText, module: 'crm', permission: 'contracts.view' },
+  { to: '/expenses', label: 'Expenses', icon: Receipt, module: 'finance', permission: 'expenses.view' },
+  { to: '/areas', label: 'Territories', icon: MapPin, module: 'crm', permission: 'areas.view' },
 ];
 
-const marketingNavItems = [
-  { to: '/marketing', label: 'Content Calendar', icon: CalendarDays },
+const marketingNavItems: NavDef[] = [
+  { to: '/marketing', label: 'Content Calendar', icon: CalendarDays, permission: 'marketing.view' },
 ];
 
 function isActivePath(currentUrl: string, to: string) {
@@ -82,6 +94,8 @@ function NavSection({
   items: Array<{ to: string; label: string; icon: React.ElementType }>;
   onNavigate?: () => void;
 }) {
+  if (items.length === 0) return null;
+
   return (
     <div className="space-y-0.5">
       <p className="px-3 py-2 text-[10px] font-semibold tracking-[0.18em] text-sidebar-foreground/40 uppercase">
@@ -98,7 +112,11 @@ function SidebarContent({
   user,
   initials,
   logout,
-  visibleErpNavItems,
+  crmItems,
+  marketingItems,
+  erpItems,
+  adminItems,
+  showSettings,
   onNavigate,
   onClose,
   showCloseButton,
@@ -106,7 +124,11 @@ function SidebarContent({
   user: SharedUser | null;
   initials: string;
   logout: () => void;
-  visibleErpNavItems: Array<{ to: string; label: string; icon: React.ElementType }>;
+  crmItems: NavDef[];
+  marketingItems: NavDef[];
+  erpItems: NavDef[];
+  adminItems: NavDef[];
+  showSettings: boolean;
   onNavigate?: () => void;
   onClose?: () => void;
   showCloseButton?: boolean;
@@ -115,10 +137,7 @@ function SidebarContent({
     <>
       <div className="flex items-center justify-between px-5 py-5">
         <div className="flex items-center gap-2.5">
-          <div className="relative flex size-9 items-center justify-center rounded-xl bg-sidebar-primary text-sm font-bold text-sidebar-primary-foreground shadow-lg shadow-black/10">
-            <span className="relative z-10">N</span>
-            <span className="absolute right-1 top-1 size-1.5 rounded-full bg-emerald-300" />
-          </div>
+          <BrandLogo size={36} className="size-9 shrink-0 rounded-xl object-cover shadow-lg shadow-black/20" />
           <div>
             <h1 className="font-heading text-base font-semibold tracking-tight text-white">Northstar</h1>
             <p className="text-[10px] tracking-[0.12em] text-sidebar-foreground/45 uppercase">Revenue desk</p>
@@ -151,23 +170,16 @@ function SidebarContent({
       </div>
 
       <nav className="mt-4 flex-1 space-y-5 overflow-y-auto px-3 py-2" aria-label="Main navigation">
-        <NavSection title="CRM" items={crmNavItems} onNavigate={onNavigate} />
-        <NavSection title="Marketing" items={marketingNavItems} onNavigate={onNavigate} />
-        {visibleErpNavItems.length > 0 && (
-          <NavSection title="Operations" items={visibleErpNavItems} onNavigate={onNavigate} />
-        )}
-        {user?.role === 'admin' && (
-          <div className="space-y-0.5">
-            <p className="px-3 py-2 text-[10px] font-semibold tracking-[0.18em] text-sidebar-foreground/40 uppercase">
-              Admin
-            </p>
-            <NavItem to="/admin/users" label="Users" icon={Shield} onNavigate={onNavigate} />
-          </div>
-        )}
+        <NavSection title="CRM" items={crmItems} onNavigate={onNavigate} />
+        <NavSection title="Marketing" items={marketingItems} onNavigate={onNavigate} />
+        <NavSection title="Operations" items={erpItems} onNavigate={onNavigate} />
+        <NavSection title="Admin" items={adminItems} onNavigate={onNavigate} />
       </nav>
 
       <div className="border-t border-sidebar-border p-3">
-        <NavItem to="/settings" label="Settings" icon={Settings} onNavigate={onNavigate} />
+        {showSettings && (
+          <NavItem to="/settings" label="Settings" icon={Settings} onNavigate={onNavigate} />
+        )}
         <Button
           variant="ghost"
           className="mt-1 w-full justify-start gap-2 px-3 text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-white"
@@ -186,6 +198,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const user = page.props.auth?.user ?? null;
   const url = page.url;
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { can, canView } = useCan();
 
   const initials = user?.name
     ?.split(' ')
@@ -197,11 +210,40 @@ export default function Layout({ children }: { children: ReactNode }) {
   const closeSidebar = () => setSidebarOpen(false);
   const logout = () => router.post('/logout');
   const enabledModules = user?.tenant?.enabled_modules;
-  const visibleErpNavItems = erpNavItems.filter(
-    (item) => !enabledModules || enabledModules.includes(item.module)
-  );
-  const allNavItems = [...crmNavItems, ...marketingNavItems, ...visibleErpNavItems];
-  const currentPage = allNavItems.find((item) => isActivePath(url, item.to))?.label ?? 'Workspace';
+
+  const allowed = (item: NavDef) => {
+    if (item.module && enabledModules && !enabledModules.includes(item.module)) {
+      return false;
+    }
+    if (item.resource) {
+      return canView(item.resource);
+    }
+    if (item.permission) {
+      return can(item.permission);
+    }
+    return true;
+  };
+
+  const visibleCrm = useMemo(() => crmNavItems.filter(allowed), [can, canView, enabledModules]);
+  const visibleMarketing = useMemo(() => marketingNavItems.filter(allowed), [can, enabledModules]);
+  const visibleErp = useMemo(() => erpNavItems.filter(allowed), [can, enabledModules]);
+  const adminItems = useMemo(() => {
+    const items: NavDef[] = [];
+    if (can('users.view')) {
+      items.push({ to: '/admin/users', label: 'Users', icon: Shield });
+    }
+    if (can('roles.manage')) {
+      items.push({ to: '/admin/roles', label: 'Roles & permissions', icon: KeyRound });
+    }
+    if (can('settings.view')) {
+      items.push({ to: '/audit-logs', label: 'Audit logs', icon: ScrollText });
+    }
+    return items;
+  }, [can]);
+
+  const allNavItems = [...visibleCrm, ...visibleMarketing, ...visibleErp, ...adminItems];
+  const currentPage = allNavItems.find((item) => isActivePath(url, item.to))?.label
+    ?? (isActivePath(url, '/settings') ? 'Settings' : 'Workspace');
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -225,7 +267,6 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-background">
-      {/* Mobile overlay */}
       {sidebarOpen && (
         <button
           type="button"
@@ -235,7 +276,6 @@ export default function Layout({ children }: { children: ReactNode }) {
         />
       )}
 
-      {/* Sidebar — drawer on mobile, fixed on desktop */}
       <aside
         className={cn(
           'fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform duration-300 ease-in-out lg:static lg:z-auto lg:shrink-0 lg:translate-x-0',
@@ -246,7 +286,11 @@ export default function Layout({ children }: { children: ReactNode }) {
           user={user}
           initials={initials}
           logout={logout}
-          visibleErpNavItems={visibleErpNavItems}
+          crmItems={visibleCrm}
+          marketingItems={visibleMarketing}
+          erpItems={visibleErp}
+          adminItems={adminItems}
+          showSettings={can('settings.view')}
           onNavigate={closeSidebar}
           onClose={closeSidebar}
           showCloseButton
@@ -254,7 +298,6 @@ export default function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Mobile header */}
         <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border/70 bg-background/90 px-4 py-3 backdrop-blur-xl lg:hidden">
           <Button
             variant="ghost"
@@ -265,10 +308,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             <Menu size={20} />
           </Button>
           <div className="flex items-center gap-2">
-            <div className="relative flex size-8 items-center justify-center rounded-lg bg-primary text-xs font-bold text-white">
-              N
-              <span className="absolute right-1 top-1 size-1 rounded-full bg-emerald-300" />
-            </div>
+            <BrandLogo size={32} className="size-8 shrink-0 rounded-lg object-cover" />
             <span className="font-heading text-sm font-semibold text-foreground">{currentPage}</span>
           </div>
         </header>

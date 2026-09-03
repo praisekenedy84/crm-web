@@ -16,7 +16,7 @@ class SyncEmailAccount implements ShouldQueue
 
     public function handle(): void
     {
-        // Provider sync stub — in production, call Gmail API / Microsoft Graph
+        // Provider sync stub - in production, call Gmail API / Microsoft Graph
         $contacts = Contact::whereNotNull('email')->limit(5)->get();
 
         foreach ($contacts as $contact) {

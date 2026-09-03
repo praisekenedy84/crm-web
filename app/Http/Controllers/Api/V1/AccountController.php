@@ -4,25 +4,25 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Account;
-use App\Services\AuditService;
+use App\Services\AccountService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class AccountController extends Controller
 {
+    public function __construct(private readonly AccountService $accounts) {}
+
     public function index(Request $request): JsonResponse
     {
-        $query = Account::with(['owner', 'area.parent.parent.parent'])->latest();
+        $this->authorize('viewAny', Account::class);
 
-        if ($search = $request->query('search')) {
-            $query->where('name', 'like', "%{$search}%");
-        }
-
-        return response()->json($query->paginate(20));
+        return response()->json($this->accounts->paginate($request->query('search')));
     }
 
     public function store(Request $request): JsonResponse
     {
+        $this->authorize('create', Account::class);
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'industry' => ['nullable', 'string', 'max:255'],
@@ -34,19 +34,20 @@ class AccountController extends Controller
             'custom_fields' => ['nullable', 'array'],
         ]);
 
-        $account = Account::create($data);
-        AuditService::log('created', $account);
-
-        return response()->json($account->load(['owner', 'area.parent.parent.parent']), 201);
+        return response()->json($this->accounts->store($data), 201);
     }
 
     public function show(Account $account): JsonResponse
     {
+        $this->authorize('view', $account);
+
         return response()->json($account->load(['owner', 'area.parent.parent.parent', 'contacts.area', 'deals.stage']));
     }
 
     public function update(Request $request, Account $account): JsonResponse
     {
+        $this->authorize('update', $account);
+
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],
             'industry' => ['nullable', 'string', 'max:255'],
@@ -58,17 +59,14 @@ class AccountController extends Controller
             'custom_fields' => ['nullable', 'array'],
         ]);
 
-        $before = $account->only(array_keys($data));
-        $account->update($data);
-        AuditService::log('updated', $account, ['before' => $before, 'after' => $data]);
-
-        return response()->json($account->load(['owner', 'area.parent.parent.parent']));
+        return response()->json($this->accounts->update($account, $data));
     }
 
     public function destroy(Account $account): JsonResponse
     {
-        AuditService::log('deleted', $account);
-        $account->delete();
+        $this->authorize('delete', $account);
+
+        $this->accounts->destroy($account);
 
         return response()->json(['message' => 'Account deleted.']);
     }

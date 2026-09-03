@@ -4,33 +4,33 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Task;
-use App\Services\AuditService;
+use App\Services\TaskService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class TaskController extends Controller
 {
+    public function __construct(private readonly TaskService $tasks) {}
+
     public function index(Request $request): JsonResponse
     {
-        $query = Task::with('assignee')->latest();
+        $this->authorize('viewAny', Task::class);
 
-        if ($status = $request->query('status')) {
-            $query->where('status', $status);
-        }
-
-        if ($assigneeId = $request->query('assignee_id')) {
-            $query->where('assignee_id', $assigneeId);
-        }
-
-        return response()->json($query->paginate(20));
+        return response()->json($this->tasks->paginate(
+            $request->query('status'),
+            $request->query('assignee_id') ? (int) $request->query('assignee_id') : null,
+        ));
     }
 
     public function store(Request $request): JsonResponse
     {
+        $this->authorize('create', Task::class);
+
         $data = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'due_date' => ['nullable', 'date'],
+            'due_time' => ['nullable', 'date_format:H:i'],
             'priority' => ['nullable', 'in:low,medium,high'],
             'status' => ['nullable', 'in:open,completed'],
             'assignee_id' => ['nullable', 'exists:users,id'],
@@ -38,41 +38,31 @@ class TaskController extends Controller
             'related_id' => ['nullable', 'integer'],
         ]);
 
-        $data['assignee_id'] ??= $request->user()->id;
-        $data['priority'] ??= 'medium';
-        $data['status'] ??= 'open';
-
-        $task = Task::create($data);
-        AuditService::log('created', $task);
-
-        return response()->json($task->load('assignee'), 201);
+        return response()->json($this->tasks->store($data, $request->user()->id), 201);
     }
 
     public function update(Request $request, Task $task): JsonResponse
     {
+        $this->authorize('update', $task);
+
         $data = $request->validate([
             'title' => ['sometimes', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'due_date' => ['nullable', 'date'],
+            'due_time' => ['nullable', 'date_format:H:i'],
             'priority' => ['nullable', 'in:low,medium,high'],
             'status' => ['nullable', 'in:open,completed'],
             'assignee_id' => ['nullable', 'exists:users,id'],
         ]);
 
-        if (($data['status'] ?? null) === 'completed' && $task->status !== 'completed') {
-            $data['completed_at'] = now();
-        }
-
-        $task->update($data);
-        AuditService::log('updated', $task, $data);
-
-        return response()->json($task->load('assignee'));
+        return response()->json($this->tasks->update($task, $data));
     }
 
     public function destroy(Task $task): JsonResponse
     {
-        AuditService::log('deleted', $task);
-        $task->delete();
+        $this->authorize('delete', $task);
+
+        $this->tasks->destroy($task);
 
         return response()->json(['message' => 'Task deleted.']);
     }

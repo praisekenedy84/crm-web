@@ -4,36 +4,29 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\ContactStatus;
 use App\Http\Controllers\Controller;
-use App\Models\Account;
 use App\Models\Contact;
-use App\Models\ContactStatusHistory;
-use App\Services\AuditService;
+use App\Services\ContactService;
 use App\Services\CrossModuleAutomationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class ContactController extends Controller
 {
+    public function __construct(private readonly ContactService $contacts) {}
+
     public function index(Request $request): JsonResponse
     {
-        $query = Contact::with(['owner', 'account.area.parent.parent.parent', 'area.parent.parent.parent'])->latest();
+        $this->authorize('viewAny', Contact::class);
 
-        if ($search = $request->query('search')) {
-            $query->where(function ($q) use ($search) {
-                $q->where('first_name', 'like', "%{$search}%")
-                    ->orWhere('last_name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
-            });
-        }
-
-        return response()->json($query->paginate(20));
+        return response()->json($this->contacts->paginate($request->query('search')));
     }
 
     public function store(Request $request): JsonResponse
     {
+        $this->authorize('create', Contact::class);
+
         $data = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
@@ -48,34 +41,29 @@ class ContactController extends Controller
             'custom_fields' => ['nullable', 'array'],
         ]);
 
-        $duplicates = $this->findDuplicates($data);
-        $data = $this->resolveAreaFromAccount($data);
-        $contact = Contact::create($data);
-        AuditService::log('created', $contact);
+        $duplicates = $this->contacts->findDuplicates($data);
+        $contact = $this->contacts->store($data);
 
         return response()->json([
-            'contact' => $contact->load(['owner', 'account.area.parent.parent.parent', 'area.parent.parent.parent']),
+            'contact' => $contact,
             'duplicates' => $duplicates,
         ], 201);
     }
 
     public function show(Contact $contact): JsonResponse
     {
-        $activities = \App\Models\Activity::where('related_type', Contact::class)
-            ->where('related_id', $contact->id)
-            ->with('owner')
-            ->latest('occurred_at')
-            ->limit(50)
-            ->get();
+        $this->authorize('view', $contact);
 
         return response()->json([
             'contact' => $contact->load(['owner', 'account.area.parent.parent.parent', 'area.parent.parent.parent', 'deals.stage']),
-            'timeline' => $activities,
+            'timeline' => $this->contacts->timeline($contact),
         ]);
     }
 
     public function update(Request $request, Contact $contact): JsonResponse
     {
+        $this->authorize('update', $contact);
+
         $data = $request->validate([
             'first_name' => ['sometimes', 'string', 'max:255'],
             'last_name' => ['sometimes', 'string', 'max:255'],
@@ -90,90 +78,42 @@ class ContactController extends Controller
             'custom_fields' => ['nullable', 'array'],
         ]);
 
-        $before = $contact->only(array_keys($data));
-        $data = $this->resolveAreaFromAccount($data);
-        $contact->update($data);
-        AuditService::log('updated', $contact, ['before' => $before, 'after' => $data]);
-
-        return response()->json($contact->load(['owner', 'account.area.parent.parent.parent', 'area.parent.parent.parent']));
+        return response()->json($this->contacts->update($contact, $data));
     }
 
     public function updateStatus(Request $request, Contact $contact, CrossModuleAutomationService $automation): JsonResponse
     {
+        $this->authorize('update', $contact);
+
         $data = $request->validate([
             'status' => ['required', Rule::enum(ContactStatus::class)],
             'notes' => ['required', 'string', 'max:1000'],
         ]);
 
-        if ($contact->status === $data['status']) {
-            return response()->json([
-                'error' => ['code' => 'VALIDATION_ERROR', 'message' => 'Contact is already in the requested status.'],
-            ], 422);
+        $status = $data['status'] instanceof ContactStatus
+            ? $data['status']
+            : ContactStatus::from($data['status']);
+
+        if ($contact->status === $status) {
+            throw ValidationException::withMessages([
+                'status' => ['Contact is already in the requested status.'],
+            ]);
         }
 
-        DB::transaction(function () use ($contact, $data, $automation) {
-            $fromStatus = $contact->status;
-
-            $contact->update(['status' => $data['status']]);
-
-            ContactStatusHistory::create([
-                'contact_id' => $contact->id,
-                'from_status' => $fromStatus,
-                'to_status' => $data['status'],
-                'notes' => $data['notes'],
-                'changed_by' => Auth::id(),
-                'changed_at' => now(),
-            ]);
-
-            AuditService::log('status_changed', $contact, [
-                'from_status' => $fromStatus->value,
-                'to_status' => $data['status'],
-                'notes' => $data['notes'],
-            ]);
-
-            if ($data['status'] === ContactStatus::Customer) {
-                $automation->onContactStatusCustomer($contact);
-            }
-        });
-
-        return response()->json($contact->fresh()->load(['owner', 'account', 'area', 'statusHistory.changedBy']));
+        return response()->json($this->contacts->updateStatus(
+            $contact,
+            $status,
+            $data['notes'],
+            $automation,
+        ));
     }
 
     public function destroy(Contact $contact): JsonResponse
     {
-        AuditService::log('deleted', $contact);
-        $contact->delete();
+        $this->authorize('delete', $contact);
+
+        $this->contacts->destroy($contact);
 
         return response()->json(['message' => 'Contact deleted.']);
-    }
-
-    private function findDuplicates(array $data): array
-    {
-        $query = Contact::query();
-
-        if (! empty($data['email'])) {
-            $query->orWhere('email', $data['email']);
-        }
-
-        if (! empty($data['phone'])) {
-            $query->orWhere('phone', $data['phone']);
-        }
-
-        return $query->limit(5)->get(['id', 'first_name', 'last_name', 'email', 'phone'])->toArray();
-    }
-
-    private function resolveAreaFromAccount(array $data): array
-    {
-        if (empty($data['account_id']) || ! empty($data['area_id'])) {
-            return $data;
-        }
-
-        $account = Account::find($data['account_id']);
-
-        if ($account?->area_id) {
-            $data['area_id'] = $account->area_id;
-        }
-
-        return $data;
     }
 }

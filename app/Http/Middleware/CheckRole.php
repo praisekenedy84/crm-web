@@ -15,13 +15,21 @@ class CheckRole
         $user = $request->user();
 
         if (! $user) {
-            return response()->json(['error' => ['code' => 'UNAUTHORIZED', 'message' => 'Authentication required.']], 401);
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json(['error' => ['code' => 'UNAUTHORIZED', 'message' => 'Authentication required.']], 401);
+            }
+
+            return redirect()->route('login');
         }
 
         $allowed = array_map(fn (string $r) => UserRole::from($r), $roles);
 
         if (! in_array($user->role, $allowed, true)) {
-            return response()->json(['error' => ['code' => 'FORBIDDEN', 'message' => 'Insufficient permissions.']], 403);
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json(['error' => ['code' => 'FORBIDDEN', 'message' => 'Insufficient permissions.']], 403);
+            }
+
+            abort(403);
         }
 
         return $next($request);

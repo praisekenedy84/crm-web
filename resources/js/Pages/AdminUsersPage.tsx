@@ -1,9 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { router, usePage } from '@inertiajs/react';
 import { Plus } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { api, type User } from '../lib/api';
+import { useSubmit } from '@/lib/submit';
+import { useCan } from '@/hooks/useCan';
+import type { SharedPageProps, User } from '@/types';
 import { PageHeader } from '@/Components/PageHeader';
 import { FormCard, FormField, FormGrid, FormSection } from '@/Components/forms';
 import { DeleteConfirmDialog } from '@/Components/DeleteConfirmDialog';
@@ -17,45 +17,61 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/Components/ui/table';
-import { Skeleton } from '@/Components/ui/skeleton';
 
 const emptyForm = {
   name: '',
   email: '',
   password: '',
-  role: 'user',
+  role: 'rep',
   status: 'active',
+  direct_permissions: [] as string[],
 };
 
-export default function AdminUsersPage() {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState<User | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
-  const [form, setForm] = useState(emptyForm);
+interface AdminUser extends User {
+  direct_permissions?: string[];
+}
 
-  const { data: users, isLoading } = useQuery({
-    queryKey: ['users'],
-    queryFn: api.getUsers,
-    enabled: user?.role === 'admin',
-  });
+interface AdminUsersPageProps {
+  users: AdminUser[];
+  permissionGroups: Record<string, string[]>;
+}
+
+export default function AdminUsersPage({ users, permissionGroups }: AdminUsersPageProps) {
+  const authUser = usePage<SharedPageProps>().props.auth.user;
+  const { can } = useCan();
+  const canManage = can('users.manage');
+  const { processing, submit } = useSubmit();
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<AdminUser | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [form, setForm] = useState(emptyForm);
+  const [showOverrides, setShowOverrides] = useState(false);
+
+  useEffect(() => {
+    if (!can('users.view')) {
+      router.visit('/');
+    }
+  }, [can]);
+
+  if (!can('users.view')) return null;
 
   const resetForm = () => setForm(emptyForm);
 
   const closeForm = () => {
     setShowForm(false);
     setEditing(null);
+    setShowOverrides(false);
     resetForm();
   };
 
   const openCreate = () => {
     setEditing(null);
     resetForm();
+    setShowOverrides(false);
     setShowForm(true);
   };
 
-  const openEdit = (u: User) => {
+  const openEdit = (u: AdminUser) => {
     setShowForm(false);
     setEditing(u);
     setForm({
@@ -64,69 +80,77 @@ export default function AdminUsersPage() {
       password: '',
       role: u.role,
       status: u.status ?? 'active',
+      direct_permissions: [...(u.direct_permissions ?? [])],
+    });
+    setShowOverrides((u.direct_permissions?.length ?? 0) > 0);
+  };
+
+  const toggleDirect = (permission: string) => {
+    setForm((prev) => {
+      const set = new Set(prev.direct_permissions);
+      if (set.has(permission)) set.delete(permission);
+      else set.add(permission);
+      return { ...prev, direct_permissions: [...set] };
     });
   };
 
-  const saveMutation = useMutation({
-    mutationFn: () => {
-      if (editing) {
-        const payload: Record<string, string> = {
-          name: form.name,
-          email: form.email,
-          role: form.role,
-          status: form.status,
-        };
-        if (form.password) payload.password = form.password;
-        return api.updateUser(editing.id, payload);
-      }
-      return api.createUser({
+  const handleSave = () => {
+    if (!canManage) return;
+
+    if (editing) {
+      submit('put', `/admin/users/${editing.id}`, {
+        name: form.name,
+        email: form.email,
+        role: form.role,
+        status: form.status,
+        direct_permissions: form.direct_permissions,
+        ...(form.password ? { password: form.password } : {}),
+      }, { onSuccess: closeForm });
+    } else {
+      submit('post', '/admin/users', {
         name: form.name,
         email: form.email,
         password: form.password,
         role: form.role,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-      closeForm();
-    },
-  });
+        direct_permissions: form.direct_permissions,
+      }, { onSuccess: closeForm });
+    }
+  };
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => api.deleteUser(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-      setDeleteTarget(null);
-    },
-  });
+  const handleDelete = () => {
+    if (!deleteTarget || !canManage) return;
+    submit('delete', `/admin/users/${deleteTarget.id}`, {}, {
+      onSuccess: () => setDeleteTarget(null),
+    });
+  };
 
   const isFormOpen = showForm || editing !== null;
-
-  if (user?.role !== 'admin') return <Navigate to="/" replace />;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="User Management"
-        description="Admin-only user administration"
+        description="Assign roles and optional permission overrides"
         action={
-          <Button onClick={() => (isFormOpen ? closeForm() : openCreate())}>
-            <Plus size={16} />
-            New User
-          </Button>
+          canManage ? (
+            <Button onClick={() => (isFormOpen ? closeForm() : openCreate())}>
+              <Plus size={16} />
+              {isFormOpen ? 'Close' : 'New User'}
+            </Button>
+          ) : undefined
         }
       />
 
-      {isFormOpen && (
+      {isFormOpen && canManage && (
         <FormCard
           title={editing ? 'Edit User' : 'Add User'}
           onClose={closeForm}
           onSubmit={(e) => {
             e.preventDefault();
-            saveMutation.mutate();
+            handleSave();
           }}
           submitLabel={editing ? 'Update User' : 'Save User'}
-          isSubmitting={saveMutation.isPending}
+          isSubmitting={processing}
         >
           <FormSection title="User Details">
             <FormGrid cols={2}>
@@ -172,7 +196,9 @@ export default function AdminUsersPage() {
                   <SelectContent>
                     <SelectItem value="admin">Admin</SelectItem>
                     <SelectItem value="manager">Manager</SelectItem>
-                    <SelectItem value="user">User</SelectItem>
+                    <SelectItem value="rep">Rep</SelectItem>
+                    <SelectItem value="support">Support</SelectItem>
+                    <SelectItem value="readonly">Readonly</SelectItem>
                   </SelectContent>
                 </Select>
               </FormField>
@@ -194,6 +220,47 @@ export default function AdminUsersPage() {
               )}
             </FormGrid>
           </FormSection>
+
+          <FormSection title="Permission overrides">
+            <p className="mb-3 text-sm text-muted-foreground">
+              Direct permissions on top of the role defaults. Leave empty to use the role matrix only.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowOverrides((v) => !v)}
+            >
+              {showOverrides ? 'Hide overrides' : 'Show override checklist'}
+            </Button>
+            {showOverrides && (
+              <div className="mt-4 max-h-72 space-y-4 overflow-y-auto rounded-lg border border-border/70 p-4">
+                {Object.entries(permissionGroups).map(([group, perms]) => (
+                  <div key={group}>
+                    <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                      {group}
+                    </p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {perms.map((permission) => (
+                        <label
+                          key={permission}
+                          className="flex items-center gap-2 text-xs font-mono"
+                        >
+                          <input
+                            type="checkbox"
+                            className="size-4 accent-primary"
+                            checked={form.direct_permissions.includes(permission)}
+                            onChange={() => toggleDirect(permission)}
+                          />
+                          {permission}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </FormSection>
         </FormCard>
       )}
 
@@ -206,33 +273,33 @@ export default function AdminUsersPage() {
                 <TableHead>Email</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Overrides</TableHead>
                 <TableHead>Last Login</TableHead>
-                <ActionsTableHead />
+                {canManage && <ActionsTableHead />}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center">
-                    <Skeleton className="mx-auto h-4 w-24" />
-                  </TableCell>
-                </TableRow>
-              ) : users?.map((u) => (
+              {users.map((u) => (
                 <TableRow key={u.id}>
                   <TableCell className="font-medium">{u.name}</TableCell>
                   <TableCell>{u.email}</TableCell>
                   <TableCell className="capitalize">{u.role}</TableCell>
                   <TableCell className="capitalize">{u.status ?? 'active'}</TableCell>
                   <TableCell className="text-muted-foreground">
-                    {u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : 'â€”'}
+                    {u.direct_permissions?.length ? u.direct_permissions.length : '-'}
                   </TableCell>
-                  <TableCell>
-                    <RowActions
-                      onEdit={() => openEdit(u)}
-                      onDelete={() => setDeleteTarget(u)}
-                      disableDelete={u.id === user?.id}
-                    />
+                  <TableCell className="text-muted-foreground">
+                    {u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : '-'}
                   </TableCell>
+                  {canManage && (
+                    <TableCell>
+                      <RowActions
+                        onEdit={() => openEdit(u)}
+                        onDelete={() => setDeleteTarget(u)}
+                        disableDelete={u.id === authUser?.id}
+                      />
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
@@ -243,9 +310,9 @@ export default function AdminUsersPage() {
       <DeleteConfirmDialog
         open={deleteTarget !== null}
         title={`Delete ${deleteTarget?.name}?`}
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
-        isDeleting={deleteMutation.isPending}
+        isDeleting={processing}
       />
     </div>
   );

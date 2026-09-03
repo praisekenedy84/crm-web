@@ -34,7 +34,7 @@ class ApiKeyController extends Controller
             'id' => $apiKey->id,
             'name' => $apiKey->name,
             'key' => "{$prefix}.{$secret}",
-            'message' => 'Store this key securely — it will not be shown again.',
+            'message' => 'Store this key securely - it will not be shown again.',
         ], 201);
     }
 

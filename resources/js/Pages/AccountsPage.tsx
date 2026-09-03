@@ -1,7 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
-import { api, type Account } from '../lib/api';
+import { useSubmit } from '@/lib/submit';
+import { useCan } from '@/hooks/useCan';
+import type { Account, Paginated } from '@/types';
 import { PageHeader } from '@/Components/PageHeader';
 import { FormCard, FormField, FormGrid, FormSection } from '@/Components/forms';
 import { AreaPicker, formatAreaLocation } from '@/Components/AreaPicker';
@@ -13,7 +14,6 @@ import { Card, CardContent } from '@/Components/ui/card';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/Components/ui/table';
-import { Skeleton } from '@/Components/ui/skeleton';
 
 const emptyForm = {
   name: '',
@@ -23,17 +23,21 @@ const emptyForm = {
   area_id: null as number | null,
 };
 
-export default function AccountsPage() {
-  const queryClient = useQueryClient();
+interface AccountsPageProps {
+  accounts: Paginated<Account>;
+  filters: { search: string };
+}
+
+export default function AccountsPage({ accounts }: AccountsPageProps) {
+  const { processing, submit } = useSubmit();
+  const { can } = useCan();
+  const canCreate = can('accounts.create');
+  const canUpdate = can('accounts.update');
+  const canDelete = can('accounts.delete');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Account | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Account | null>(null);
   const [form, setForm] = useState(emptyForm);
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['accounts'],
-    queryFn: () => api.getAccounts(),
-  });
 
   const resetForm = () => setForm(emptyForm);
 
@@ -61,32 +65,27 @@ export default function AccountsPage() {
     });
   };
 
-  const saveMutation = useMutation({
-    mutationFn: () => {
-      const payload = {
-        name: form.name,
-        industry: form.industry || undefined,
-        website: form.website || undefined,
-        phone: form.phone || undefined,
-        area_id: form.area_id ?? undefined,
-      };
-      return editing
-        ? api.updateAccount(editing.id, payload)
-        : api.createAccount(payload);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['accounts'] });
-      closeForm();
-    },
-  });
+  const handleSave = () => {
+    const payload = {
+      name: form.name,
+      industry: form.industry || undefined,
+      website: form.website || undefined,
+      phone: form.phone || undefined,
+      area_id: form.area_id ?? undefined,
+    };
+    if (editing) {
+      submit('put', `/accounts/${editing.id}`, payload, { onSuccess: closeForm });
+    } else {
+      submit('post', '/accounts', payload, { onSuccess: closeForm });
+    }
+  };
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => api.deleteAccount(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['accounts'] });
-      setDeleteTarget(null);
-    },
-  });
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    submit('delete', `/accounts/${deleteTarget.id}`, {}, {
+      onSuccess: () => setDeleteTarget(null),
+    });
+  };
 
   const isFormOpen = showForm || editing !== null;
 
@@ -96,10 +95,12 @@ export default function AccountsPage() {
         title="Accounts"
         description="Shops, companies, and workplaces"
         action={
-          <Button onClick={() => (isFormOpen ? closeForm() : openCreate())}>
-            <Plus size={16} />
-            New Account
-          </Button>
+          (canCreate || isFormOpen) && (
+            <Button onClick={() => (isFormOpen ? closeForm() : openCreate())}>
+              <Plus size={16} />
+              {isFormOpen ? 'Close' : 'New Account'}
+            </Button>
+          )
         }
       />
 
@@ -110,10 +111,10 @@ export default function AccountsPage() {
           onClose={closeForm}
           onSubmit={(e) => {
             e.preventDefault();
-            saveMutation.mutate();
+            handleSave();
           }}
           submitLabel={editing ? 'Update Account' : 'Save Account'}
-          isSubmitting={saveMutation.isPending}
+          isSubmitting={processing}
         >
           <FormSection title="Workplace Information">
             <FormGrid cols={3}>
@@ -178,22 +179,16 @@ export default function AccountsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                    <Skeleton className="mx-auto h-4 w-24" />
-                  </TableCell>
-                </TableRow>
-              ) : data?.data.map((a) => (
+              {accounts.data.map((a) => (
                 <TableRow key={a.id}>
                   <TableCell className="font-medium">{a.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{a.industry || 'â€”'}</TableCell>
+                  <TableCell className="text-muted-foreground">{a.industry || '-'}</TableCell>
                   <TableCell className="text-muted-foreground">{formatAreaLocation(a.area)}</TableCell>
-                  <TableCell className="text-muted-foreground">{a.phone || 'â€”'}</TableCell>
+                  <TableCell className="text-muted-foreground">{a.phone || '-'}</TableCell>
                   <TableCell>
                     <RowActions
-                      onEdit={() => openEdit(a)}
-                      onDelete={() => setDeleteTarget(a)}
+                      onEdit={canUpdate ? () => openEdit(a) : undefined}
+                      onDelete={canDelete ? () => setDeleteTarget(a) : undefined}
                     />
                   </TableCell>
                 </TableRow>
@@ -206,9 +201,9 @@ export default function AccountsPage() {
       <DeleteConfirmDialog
         open={deleteTarget !== null}
         title={`Delete ${deleteTarget?.name}?`}
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
-        isDeleting={deleteMutation.isPending}
+        isDeleting={processing}
       />
     </div>
   );

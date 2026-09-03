@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
-import { api, type Contract } from '../lib/api';
+import { useSubmit } from '@/lib/submit';
+import type { Contract, Paginated, Service } from '@/types';
 import { PageHeader } from '@/Components/PageHeader';
 import { FormCard, FormField, FormGrid, FormSection } from '@/Components/forms';
 import { DeleteConfirmDialog } from '@/Components/DeleteConfirmDialog';
@@ -15,7 +15,6 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/Components/ui/table';
-import { Skeleton } from '@/Components/ui/skeleton';
 
 const emptyForm = {
   customer_party_id: '',
@@ -25,22 +24,17 @@ const emptyForm = {
   amount_paid: '',
 };
 
-export default function ContractsPage() {
-  const queryClient = useQueryClient();
+interface ContractsPageProps {
+  contracts: Paginated<Contract>;
+  services: Service[];
+}
+
+export default function ContractsPage({ contracts, services }: ContractsPageProps) {
+  const { processing, submit } = useSubmit();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Contract | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Contract | null>(null);
   const [form, setForm] = useState(emptyForm);
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['contracts'],
-    queryFn: () => api.getContracts(),
-  });
-
-  const { data: services } = useQuery({
-    queryKey: ['services'],
-    queryFn: () => api.getServices(),
-  });
 
   const resetForm = () => setForm(emptyForm);
 
@@ -68,32 +62,27 @@ export default function ContractsPage() {
     });
   };
 
-  const saveMutation = useMutation({
-    mutationFn: () => {
-      const payload = {
-        customer_party_id: Number(form.customer_party_id),
-        service_id: Number(form.service_id),
-        start_date: form.start_date,
-        end_date: form.end_date,
-        amount_paid: Number(form.amount_paid),
-      };
-      return editing
-        ? api.updateContract(editing.id, payload)
-        : api.createContract(payload);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['contracts'] });
-      closeForm();
-    },
-  });
+  const handleSave = () => {
+    const payload = {
+      customer_party_id: Number(form.customer_party_id),
+      service_id: Number(form.service_id),
+      start_date: form.start_date,
+      end_date: form.end_date,
+      amount_paid: Number(form.amount_paid),
+    };
+    if (editing) {
+      submit('put', `/contracts/${editing.id}`, payload, { onSuccess: closeForm });
+    } else {
+      submit('post', '/contracts', payload, { onSuccess: closeForm });
+    }
+  };
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => api.deleteContract(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['contracts'] });
-      setDeleteTarget(null);
-    },
-  });
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    submit('delete', `/contracts/${deleteTarget.id}`, {}, {
+      onSuccess: () => setDeleteTarget(null),
+    });
+  };
 
   const fmt = (n: number, currency = 'TZS') =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
@@ -120,10 +109,10 @@ export default function ContractsPage() {
           onClose={closeForm}
           onSubmit={(e) => {
             e.preventDefault();
-            saveMutation.mutate();
+            handleSave();
           }}
           submitLabel={editing ? 'Update Contract' : 'Save Contract'}
-          isSubmitting={saveMutation.isPending}
+          isSubmitting={processing}
         >
           <FormSection title="Customer & Service">
             <FormGrid cols={2}>
@@ -141,12 +130,13 @@ export default function ContractsPage() {
                 <Select
                   value={form.service_id}
                   onValueChange={(value) => value && setForm({ ...form, service_id: value })}
+                  items={services.map((s) => ({ value: String(s.id), label: s.name }))}
                 >
                   <SelectTrigger id="service_id" className="w-full">
                     <SelectValue placeholder="Select service" />
                   </SelectTrigger>
                   <SelectContent>
-                    {services?.data.map((s) => (
+                    {services.map((s) => (
                       <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -205,18 +195,12 @@ export default function ContractsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center">
-                    <Skeleton className="mx-auto h-4 w-24" />
-                  </TableCell>
-                </TableRow>
-              ) : data?.data.map((c) => (
+              {contracts.data.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell className="font-medium">{c.party?.name ?? `#${c.customer_party_id}`}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.service?.name ?? 'â€”'}</TableCell>
+                  <TableCell className="text-muted-foreground">{c.service?.name ?? '-'}</TableCell>
                   <TableCell className="text-muted-foreground">
-                    {c.start_date} â†’ {c.end_date}
+                    {c.start_date} → {c.end_date}
                   </TableCell>
                   <TableCell>{fmt(c.amount_paid, c.currency)}</TableCell>
                   <TableCell className="capitalize text-muted-foreground">{c.status}</TableCell>
@@ -236,9 +220,9 @@ export default function ContractsPage() {
       <DeleteConfirmDialog
         open={deleteTarget !== null}
         title="Delete contract?"
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
-        isDeleting={deleteMutation.isPending}
+        isDeleting={processing}
       />
     </div>
   );

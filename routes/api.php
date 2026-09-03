@@ -54,7 +54,7 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::prefix('v1')->middleware(['throttle:api'])->group(function () {
+Route::prefix('v1')->name('api.')->middleware(['throttle:api'])->group(function () {
     Route::post('/auth/login', [AuthController::class, 'login']);
     Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword']);
     Route::post('/auth/reset-password', [AuthController::class, 'resetPassword']);
@@ -74,6 +74,7 @@ Route::prefix('v1')->middleware(['throttle:api'])->group(function () {
         Route::patch('contacts/{contact}/status', [ContactController::class, 'updateStatus']);
         Route::apiResource('leads', LeadController::class);
         Route::post('leads/{lead}/convert', [LeadController::class, 'convert']);
+        Route::post('contacts/{contact}/leads', [LeadController::class, 'storeFromContact']);
 
         Route::get('pipelines', [DealController::class, 'pipelines']);
         Route::apiResource('deals', DealController::class);
@@ -85,7 +86,7 @@ Route::prefix('v1')->middleware(['throttle:api'])->group(function () {
         Route::prefix('marketing')->group(function () {
             Route::get('content-items', [MarketingContentItemController::class, 'index']);
             Route::post('content-items', [MarketingContentItemController::class, 'store']);
-            Route::middleware('role:admin,manager')->group(function () {
+            Route::middleware('permission:marketing.manage')->group(function () {
                 Route::get('contributors', [MarketingContentItemController::class, 'contributors']);
                 Route::put('content-items/{contentItem}', [MarketingContentItemController::class, 'update']);
                 Route::delete('content-items/{contentItem}', [MarketingContentItemController::class, 'destroy']);
@@ -103,15 +104,16 @@ Route::prefix('v1')->middleware(['throttle:api'])->group(function () {
             Route::get('leaderboard', [ReportController::class, 'leaderboard']);
             Route::get('visits-by-area', [ReportController::class, 'visitsByArea']);
             Route::get('leads-per-rep-per-day', [ReportController::class, 'leadsPerRepPerDay']);
+            Route::get('sales-done', [ReportController::class, 'salesDone']);
         });
 
         // ERP: Areas & field operations (CRM module)
         Route::middleware('module:crm')->group(function () {
             Route::apiResource('areas', AreaController::class)->except(['destroy']);
             Route::post('areas/streets', [AreaController::class, 'createInlineStreet']);
-            Route::post('areas/{area}/merge', [AreaController::class, 'merge'])->middleware('role:manager');
+            Route::post('areas/{area}/merge', [AreaController::class, 'merge'])->middleware('permission:areas.update');
 
-            Route::middleware('role:admin,manager')->group(function () {
+            Route::middleware('permission:areas.update')->group(function () {
                 Route::apiResource('services', ServiceController::class);
             });
 
@@ -135,8 +137,8 @@ Route::prefix('v1')->middleware(['throttle:api'])->group(function () {
                 Route::get('requests/{leaveRequest}', [LeaveController::class, 'showLeaveRequest']);
                 Route::put('requests/{leaveRequest}', [LeaveController::class, 'updateLeaveRequest']);
                 Route::delete('requests/{leaveRequest}', [LeaveController::class, 'destroyLeaveRequest']);
-                Route::post('requests/{leaveRequest}/approve', [LeaveController::class, 'approveLeaveRequest'])->middleware('role:admin,manager');
-                Route::post('requests/{leaveRequest}/reject', [LeaveController::class, 'rejectLeaveRequest'])->middleware('role:admin,manager');
+                Route::post('requests/{leaveRequest}/approve', [LeaveController::class, 'approveLeaveRequest'])->middleware('permission:hr.leave.approve');
+                Route::post('requests/{leaveRequest}/reject', [LeaveController::class, 'rejectLeaveRequest'])->middleware('permission:hr.leave.approve');
 
                 Route::get('balances', [LeaveController::class, 'indexLeaveBalances']);
                 Route::post('calculate-days', [LeaveController::class, 'calculateDays']);
@@ -157,7 +159,7 @@ Route::prefix('v1')->middleware(['throttle:api'])->group(function () {
 
                 Route::get('payroll-runs', [HrController::class, 'indexPayrollRuns']);
                 Route::post('payroll-runs', [HrController::class, 'storePayrollRun']);
-                Route::post('payroll-runs/{payrollRun}/process', [HrController::class, 'processPayrollRun'])->middleware('role:admin,manager');
+                Route::post('payroll-runs/{payrollRun}/process', [HrController::class, 'processPayrollRun'])->middleware('permission:hr.update');
             });
 
             Route::get('performance/snapshots', [PerformanceController::class, 'index']);
@@ -168,7 +170,7 @@ Route::prefix('v1')->middleware(['throttle:api'])->group(function () {
         Route::middleware('module:finance')->group(function () {
             Route::prefix('finance')->group(function () {
                 Route::get('accounts', [FinanceController::class, 'indexAccounts']);
-                Route::post('accounts', [FinanceController::class, 'storeAccount'])->middleware('role:admin,manager');
+                Route::post('accounts', [FinanceController::class, 'storeAccount'])->middleware('permission:finance.create');
 
                 Route::get('invoices', [FinanceController::class, 'indexInvoices']);
                 Route::post('invoices', [FinanceController::class, 'storeInvoice']);
@@ -181,18 +183,18 @@ Route::prefix('v1')->middleware(['throttle:api'])->group(function () {
 
             Route::prefix('expenses')->group(function () {
                 Route::get('categories', [ExpenseController::class, 'indexCategories']);
-                Route::post('categories', [ExpenseController::class, 'storeCategory'])->middleware('role:admin,manager');
+                Route::post('categories', [ExpenseController::class, 'storeCategory'])->middleware('permission:expenses.approve');
                 Route::get('categories/{expenseCategory}', [ExpenseController::class, 'showCategory']);
-                Route::put('categories/{expenseCategory}', [ExpenseController::class, 'updateCategory'])->middleware('role:admin,manager');
-                Route::delete('categories/{expenseCategory}', [ExpenseController::class, 'destroyCategory'])->middleware('role:admin,manager');
+                Route::put('categories/{expenseCategory}', [ExpenseController::class, 'updateCategory'])->middleware('permission:expenses.approve');
+                Route::delete('categories/{expenseCategory}', [ExpenseController::class, 'destroyCategory'])->middleware('permission:expenses.approve');
 
                 Route::get('/', [ExpenseController::class, 'indexExpenses']);
                 Route::post('/', [ExpenseController::class, 'storeExpense']);
                 Route::get('{expense}', [ExpenseController::class, 'showExpense']);
                 Route::put('{expense}', [ExpenseController::class, 'updateExpense']);
                 Route::delete('{expense}', [ExpenseController::class, 'destroyExpense']);
-                Route::post('{expense}/approve', [ExpenseController::class, 'approveExpense'])->middleware('role:admin,manager');
-                Route::post('{expense}/reject', [ExpenseController::class, 'rejectExpense'])->middleware('role:admin,manager');
+                Route::post('{expense}/approve', [ExpenseController::class, 'approveExpense'])->middleware('permission:expenses.approve');
+                Route::post('{expense}/reject', [ExpenseController::class, 'rejectExpense'])->middleware('permission:expenses.approve');
             });
         });
 
@@ -217,7 +219,7 @@ Route::prefix('v1')->middleware(['throttle:api'])->group(function () {
             Route::get('purchase-orders/{purchaseOrder}', [InventoryController::class, 'showPurchaseOrder']);
             Route::put('purchase-orders/{purchaseOrder}', [InventoryController::class, 'updatePurchaseOrder']);
             Route::delete('purchase-orders/{purchaseOrder}', [InventoryController::class, 'destroyPurchaseOrder']);
-            Route::post('purchase-orders/{purchaseOrder}/approve', [InventoryController::class, 'approvePurchaseOrder'])->middleware('role:admin,manager');
+            Route::post('purchase-orders/{purchaseOrder}/approve', [InventoryController::class, 'approvePurchaseOrder'])->middleware('permission:inventory.update');
             Route::post('purchase-orders/{purchaseOrder}/goods-receipt', [InventoryController::class, 'goodsReceipt']);
         });
 
@@ -243,7 +245,7 @@ Route::prefix('v1')->middleware(['throttle:api'])->group(function () {
         });
 
         // Admin: module configuration
-        Route::middleware('role:admin')->prefix('modules')->group(function () {
+        Route::middleware('permission:modules.manage')->prefix('modules')->group(function () {
             Route::get('/', [ModuleController::class, 'index']);
             Route::put('/', [ModuleController::class, 'update']);
         });
@@ -290,8 +292,10 @@ Route::prefix('v1')->middleware(['throttle:api'])->group(function () {
         Route::get('analytics/audit-logs', [AnalyticsController::class, 'auditLogs']);
 
         // Admin (Phase 1 completion)
-        Route::middleware('role:admin')->group(function () {
+        Route::middleware('permission:users.manage')->group(function () {
             Route::apiResource('users', UserController::class);
+        });
+        Route::middleware('permission:api_keys.manage')->group(function () {
             Route::apiResource('api-keys', ApiKeyController::class)->only(['index', 'store', 'destroy']);
         });
     });

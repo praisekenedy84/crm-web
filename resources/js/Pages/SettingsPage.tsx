@@ -1,22 +1,37 @@
-import { useQuery } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import type {
+  ApiKeyRecord,
+  AutomationRule,
+  EmailTemplate,
+  LeadScoreRule,
+  Territory,
+  Webhook,
+} from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 
-export default function SettingsPage() {
-  const { data: webhooks } = useQuery({ queryKey: ['webhooks'], queryFn: api.getWebhooks });
-  const { data: rules } = useQuery({ queryKey: ['automation'], queryFn: api.getAutomationRules });
-  const { data: templates } = useQuery({ queryKey: ['email-templates'], queryFn: api.getEmailTemplates });
-  const { data: territories } = useQuery({ queryKey: ['territories'], queryFn: api.getTerritories });
-  const { data: scoreRules } = useQuery({ queryKey: ['lead-scores'], queryFn: api.getLeadScoreRules });
-  const { data: apiKeys } = useQuery({ queryKey: ['api-keys'], queryFn: api.getApiKeys });
+interface SettingsPageProps {
+  automationRules: Pick<AutomationRule, 'id' | 'name'>[];
+  webhooks: Pick<Webhook, 'id' | 'url'>[];
+  emailTemplates: Pick<EmailTemplate, 'id' | 'name'>[];
+  territories: Pick<Territory, 'id' | 'name'>[];
+  leadScoreRules: Pick<LeadScoreRule, 'id' | 'name' | 'points'>[];
+  apiKeys: Pick<ApiKeyRecord, 'id' | 'name' | 'key_prefix'>[];
+}
 
+export default function SettingsPage({
+  automationRules,
+  webhooks,
+  emailTemplates,
+  territories,
+  leadScoreRules,
+  apiKeys,
+}: SettingsPageProps) {
   const sections = [
-    { title: 'Automation Rules', items: rules?.map((r) => r.name) ?? [] },
-    { title: 'Webhooks', items: webhooks?.map((w) => w.url) ?? [] },
-    { title: 'Email Templates', items: templates?.map((t) => t.name) ?? [] },
-    { title: 'Territories', items: territories?.map((t) => t.name) ?? [] },
-    { title: 'Lead Scoring Rules', items: scoreRules?.map((r) => `${r.name} (+${r.points})`) ?? [] },
-    { title: 'API Keys', items: apiKeys?.map((k) => `${k.name} (${k.key_prefix}â€¦`) ?? [] },
+    { title: 'Automation Rules', items: automationRules.map((r) => r.name) },
+    { title: 'Webhooks', items: webhooks.map((w) => w.url) },
+    { title: 'Email Templates', items: emailTemplates.map((t) => t.name) },
+    { title: 'Territories', items: territories.map((t) => t.name) },
+    { title: 'Lead Scoring Rules', items: leadScoreRules.map((r) => `${r.name} (+${r.points})`) },
+    { title: 'API Keys', items: apiKeys.map((k) => `${k.name} (${k.key_prefix}...)`) },
   ];
 
   return (

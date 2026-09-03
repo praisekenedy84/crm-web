@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CalendarDays, ChevronLeft, ChevronRight, Clock3, Lightbulb, Pencil,
   Plus, Send, Sparkles, Trash2, UserRound,
 } from 'lucide-react';
-import {
-  api, getApiErrorMessage, type MarketingContentItem, type MarketingContentStatus,
-  type MarketingContentSubmission, type MarketingContentType, type MarketingPlatform,
-} from '@/lib/api';
-import { useAuth } from '@/context/AuthContext';
+import { useSubmit, visitFilters } from '@/lib/submit';
+import type {
+  MarketingContentItem, MarketingContentStatus, MarketingContentSubmission,
+  MarketingContentType, MarketingPlatform, User,
+} from '@/types';
+import { useCan } from '@/hooks/useCan';
 import { useFeedback } from '@/Components/Feedback';
 import { PageHeader } from '@/Components/PageHeader';
 import { FormCard, FormField, FormGrid, FormSection } from '@/Components/forms';
@@ -21,7 +21,6 @@ import { Input } from '@/Components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/Components/ui/select';
-import { Skeleton } from '@/Components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
 const platforms: { value: MarketingPlatform; label: string }[] = [
@@ -73,11 +72,28 @@ interface ManagementForm extends MarketingContentSubmission {
   assigned_to: string;
 }
 
+interface MarketingPageProps {
+  items: MarketingContentItem[];
+  contributors: User[];
+  filters: { month: string; status: string; platform: string };
+}
+
 function dateKey(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function monthKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+}
+
+function monthFromFilter(value: string) {
+  const [year, month] = value.split('-').map(Number);
+  return new Date(year, (month || 1) - 1, 1);
 }
 
 function toLocalDateTime(value?: string | null) {
@@ -179,49 +195,26 @@ function ContentSummary({
       </div>
       {!compact && (
         <p className="mt-2 truncate text-xs text-muted-foreground">
-          {item.platforms.map((platform) => platforms.find((entry) => entry.value === platform)?.label).join(' Â· ')}
+          {item.platforms.map((platform) => platforms.find((entry) => entry.value === platform)?.label).join(' · ')}
         </p>
       )}
     </button>
   );
 }
 
-export default function MarketingPage() {
-  const { user } = useAuth();
+export default function MarketingPage({ items, contributors, filters }: MarketingPageProps) {
   const { notify } = useFeedback();
-  const queryClient = useQueryClient();
-  const canManage = user?.role === 'admin' || user?.role === 'manager';
-  const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [platformFilter, setPlatformFilter] = useState('all');
+  const { processing, submit } = useSubmit();
+  const { can } = useCan();
+  const canManage = can('marketing.manage');
+  const canCreate = can('marketing.create');
+  const month = useMemo(() => monthFromFilter(filters.month), [filters.month]);
   const [showSubmission, setShowSubmission] = useState(false);
   const [submission, setSubmission] = useState<MarketingContentSubmission>(emptySubmission);
   const [editing, setEditing] = useState<MarketingContentItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MarketingContentItem | null>(null);
   const [management, setManagement] = useState<ManagementForm | null>(null);
 
-  const monthStart = new Date(month.getFullYear(), month.getMonth(), 1);
-  const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 0);
-  const queryParams = {
-    from: dateKey(monthStart),
-    to: dateKey(monthEnd),
-    include_unscheduled: '1',
-    ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
-    ...(platformFilter !== 'all' ? { platform: platformFilter } : {}),
-  };
-
-  const contentQuery = useQuery({
-    queryKey: ['marketing-content', queryParams],
-    queryFn: () => api.getMarketingContent(queryParams),
-  });
-
-  const contributorsQuery = useQuery({
-    queryKey: ['marketing-contributors'],
-    queryFn: () => api.getMarketingContributors(),
-    enabled: canManage,
-  });
-
-  const items = contentQuery.data?.data ?? [];
   const backlog = items.filter((item) => !item.scheduled_at);
   const scheduled = items.filter((item) => item.scheduled_at);
   const days = useMemo(() => calendarDays(month), [month]);
@@ -234,56 +227,55 @@ export default function MarketingPage() {
     [scheduled]
   );
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['marketing-content'] });
+  const applyFilters = (next: Partial<typeof filters>) => {
+    visitFilters('/marketing', {
+      month: next.month ?? filters.month,
+      status: next.status ?? filters.status,
+      platform: next.platform ?? filters.platform,
+    });
+  };
 
-  const submitMutation = useMutation({
-    mutationFn: () => api.createMarketingContent({
+  const handleCreate = () => {
+    submit('post', '/marketing', {
       ...submission,
       proposed_date: submission.proposed_date || undefined,
-    }),
-    onSuccess: () => {
-      refresh();
-      setSubmission(emptySubmission);
-      setShowSubmission(false);
-      notify('Idea added to the marketing backlog.');
-    },
-    onError: (error) => notify(getApiErrorMessage(error, 'The idea could not be saved.'), 'error'),
-  });
+    }, {
+      onSuccess: () => {
+        setSubmission(emptySubmission);
+        setShowSubmission(false);
+      },
+    });
+  };
 
-  const updateMutation = useMutation({
-    mutationFn: () => {
-      if (!editing || !management) throw new Error('No content item selected.');
-      return api.updateMarketingContent(editing.id, {
-        ...management,
-        proposed_date: management.proposed_date || null,
-        assigned_to: management.assigned_to === 'unassigned'
-          ? null
-          : Number(management.assigned_to),
-        scheduled_at: management.scheduled_at
-          ? new Date(management.scheduled_at).toISOString()
-          : null,
-      });
-    },
-    onSuccess: () => {
-      refresh();
-      setEditing(null);
-      setManagement(null);
-      notify('Content plan updated.');
-    },
-    onError: (error) => notify(getApiErrorMessage(error, 'The content plan could not be updated.'), 'error'),
-  });
+  const handleUpdate = () => {
+    if (!editing || !management) return;
+    submit('put', `/marketing/${editing.id}`, {
+      ...management,
+      proposed_date: management.proposed_date || null,
+      assigned_to: management.assigned_to === 'unassigned'
+        ? null
+        : Number(management.assigned_to),
+      scheduled_at: management.scheduled_at
+        ? new Date(management.scheduled_at).toISOString()
+        : null,
+    }, {
+      onSuccess: () => {
+        setEditing(null);
+        setManagement(null);
+      },
+    });
+  };
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => api.deleteMarketingContent(id),
-    onSuccess: () => {
-      refresh();
-      setDeleteTarget(null);
-      setEditing(null);
-      setManagement(null);
-      notify('Content item deleted.');
-    },
-    onError: (error) => notify(getApiErrorMessage(error, 'The content item could not be deleted.'), 'error'),
-  });
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    submit('delete', `/marketing/${deleteTarget.id}`, {}, {
+      onSuccess: () => {
+        setDeleteTarget(null);
+        setEditing(null);
+        setManagement(null);
+      },
+    });
+  };
 
   const openEdit = (item: MarketingContentItem) => {
     if (!canManage) return;
@@ -307,7 +299,8 @@ export default function MarketingPage() {
   };
 
   const shiftMonth = (amount: number) => {
-    setMonth(new Date(month.getFullYear(), month.getMonth() + amount, 1));
+    const next = new Date(month.getFullYear(), month.getMonth() + amount, 1);
+    applyFilters({ month: monthKey(next) });
   };
 
   return (
@@ -316,13 +309,15 @@ export default function MarketingPage() {
         title="Marketing"
         description="Turn team ideas into a visible, shared social publishing plan."
         action={
-          <Button onClick={() => {
-            closeManagement();
-            setShowSubmission((open) => !open);
-          }}>
-            <Plus className="size-4" />
-            Add idea
-          </Button>
+          canCreate ? (
+            <Button onClick={() => {
+              closeManagement();
+              setShowSubmission((open) => !open);
+            }}>
+              <Plus className="size-4" />
+              Add idea
+            </Button>
+          ) : undefined
         }
       />
 
@@ -363,10 +358,10 @@ export default function MarketingPage() {
               notify('Choose at least one social platform.', 'error');
               return;
             }
-            submitMutation.mutate();
+            handleCreate();
           }}
           submitLabel="Add to ideas"
-          isSubmitting={submitMutation.isPending}
+          isSubmitting={processing}
         >
           <FormSection title="The idea">
             <FormGrid cols={2}>
@@ -396,6 +391,7 @@ export default function MarketingPage() {
                     ...submission,
                     content_type: value as MarketingContentType,
                   })}
+                  items={contentTypes.map((type) => ({ value: type.value, label: type.label }))}
                 >
                   <SelectTrigger id="marketing_type" className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -435,10 +431,10 @@ export default function MarketingPage() {
               notify('Choose at least one social platform.', 'error');
               return;
             }
-            updateMutation.mutate();
+            handleUpdate();
           }}
           submitLabel="Save content plan"
-          isSubmitting={updateMutation.isPending}
+          isSubmitting={processing}
         >
           <FormSection title="Creative direction">
             <FormGrid cols={2}>
@@ -466,6 +462,7 @@ export default function MarketingPage() {
                     ...management,
                     content_type: value as MarketingContentType,
                   })}
+                  items={contentTypes.map((type) => ({ value: type.value, label: type.label }))}
                 >
                   <SelectTrigger id="manage_type" className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -508,6 +505,7 @@ export default function MarketingPage() {
                     ...management,
                     status: value as MarketingContentStatus,
                   })}
+                  items={statuses.map((status) => ({ value: status.value, label: status.label }))}
                 >
                   <SelectTrigger id="manage_status" className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -521,11 +519,18 @@ export default function MarketingPage() {
                 <Select
                   value={management.assigned_to}
                   onValueChange={(value) => value && setManagement({ ...management, assigned_to: value })}
+                  items={[
+                    { value: 'unassigned', label: 'Unassigned' },
+                    ...contributors.map((contributor) => ({
+                      value: String(contributor.id),
+                      label: contributor.name,
+                    })),
+                  ]}
                 >
                   <SelectTrigger id="manage_owner" className="w-full"><SelectValue placeholder="Unassigned" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">Unassigned</SelectItem>
-                    {contributorsQuery.data?.map((contributor) => (
+                    {contributors.map((contributor) => (
                       <SelectItem key={contributor.id} value={String(contributor.id)}>
                         {contributor.name}
                       </SelectItem>
@@ -564,18 +569,13 @@ export default function MarketingPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-3 pt-4">
-            {contentQuery.isLoading ? (
-              <>
-                <Skeleton className="h-24 w-full rounded-xl" />
-                <Skeleton className="h-24 w-full rounded-xl" />
-              </>
-            ) : backlog.length === 0 ? (
+            {backlog.length === 0 ? (
               <DataState
                 compact
                 title="The backlog is clear"
                 description="Share an idea whenever inspiration strikes."
-                actionLabel="Add idea"
-                onAction={() => setShowSubmission(true)}
+                actionLabel={canCreate ? 'Add idea' : undefined}
+                onAction={canCreate ? () => setShowSubmission(true) : undefined}
               />
             ) : backlog.map((item) => (
               <div key={item.id} className="space-y-1.5">
@@ -612,7 +612,11 @@ export default function MarketingPage() {
                 <Button variant="outline" size="icon-sm" onClick={() => shiftMonth(-1)} aria-label="Previous month">
                   <ChevronLeft className="size-4" />
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => applyFilters({ month: monthKey(new Date(new Date().getFullYear(), new Date().getMonth(), 1)) })}
+                >
                   Today
                 </Button>
                 <Button variant="outline" size="icon-sm" onClick={() => shiftMonth(1)} aria-label="Next month">
@@ -621,7 +625,14 @@ export default function MarketingPage() {
               </div>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
-              <Select value={statusFilter} onValueChange={(value) => value && setStatusFilter(value)}>
+              <Select
+                value={filters.status}
+                onValueChange={(value) => value && applyFilters({ status: value })}
+                items={[
+                  { value: 'all', label: 'All statuses' },
+                  ...statuses.map((status) => ({ value: status.value, label: status.label })),
+                ]}
+              >
                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All statuses</SelectItem>
@@ -630,7 +641,14 @@ export default function MarketingPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={platformFilter} onValueChange={(value) => value && setPlatformFilter(value)}>
+              <Select
+                value={filters.platform}
+                onValueChange={(value) => value && applyFilters({ platform: value })}
+                items={[
+                  { value: 'all', label: 'All platforms' },
+                  ...platforms.map((platform) => ({ value: platform.value, label: platform.label })),
+                ]}
+              >
                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All platforms</SelectItem>
@@ -642,101 +660,82 @@ export default function MarketingPage() {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {contentQuery.isError ? (
-              <DataState
-                tone="error"
-                title="Calendar unavailable"
-                description={getApiErrorMessage(contentQuery.error, 'The content calendar could not be loaded.')}
-                actionLabel="Try again"
-                onAction={() => contentQuery.refetch()}
-              />
-            ) : (
-              <>
-                <div className="hidden lg:block">
-                  <div className="grid grid-cols-7 border-b border-border/70 bg-muted/25">
-                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-                      <div key={day} className="px-3 py-2 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-                        {day}
+            <div className="hidden lg:block">
+              <div className="grid grid-cols-7 border-b border-border/70 bg-muted/25">
+                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
+                  <div key={day} className="px-3 py-2 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+                    {day}
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7">
+                {days.map((day) => {
+                  const key = dateKey(day);
+                  const dayItems = itemsByDay[key] ?? [];
+                  const inMonth = day.getMonth() === month.getMonth();
+                  const isToday = key === dateKey(new Date());
+                  return (
+                    <div
+                      key={key}
+                      className={cn(
+                        'min-h-32 border-b border-r border-border/60 p-2 last:border-r-0',
+                        !inMonth && 'bg-muted/25 text-muted-foreground'
+                      )}
+                    >
+                      <div className={cn(
+                        'mb-2 flex size-7 items-center justify-center rounded-full text-xs font-medium',
+                        isToday && 'bg-primary text-primary-foreground'
+                      )}>
+                        {day.getDate()}
                       </div>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-7">
-                    {days.map((day) => {
-                      const key = dateKey(day);
-                      const dayItems = itemsByDay[key] ?? [];
-                      const inMonth = day.getMonth() === month.getMonth();
-                      const isToday = key === dateKey(new Date());
-                      return (
-                        <div
-                          key={key}
-                          className={cn(
-                            'min-h-32 border-b border-r border-border/60 p-2 last:border-r-0',
-                            !inMonth && 'bg-muted/25 text-muted-foreground'
-                          )}
-                        >
-                          <div className={cn(
-                            'mb-2 flex size-7 items-center justify-center rounded-full text-xs font-medium',
-                            isToday && 'bg-primary text-primary-foreground'
-                          )}>
-                            {day.getDate()}
-                          </div>
-                          <div className="space-y-1.5">
-                            {contentQuery.isLoading && inMonth ? (
-                              <Skeleton className="h-12 w-full rounded-lg" />
-                            ) : dayItems.slice(0, 3).map((item) => (
-                              <ContentSummary
-                                key={item.id}
-                                item={item}
-                                compact
-                                onEdit={canManage ? openEdit : undefined}
-                              />
-                            ))}
-                            {dayItems.length > 3 && (
-                              <p className="px-1 text-[11px] font-medium text-muted-foreground">
-                                +{dayItems.length - 3} more
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                      <div className="space-y-1.5">
+                        {dayItems.slice(0, 3).map((item) => (
+                          <ContentSummary
+                            key={item.id}
+                            item={item}
+                            compact
+                            onEdit={canManage ? openEdit : undefined}
+                          />
+                        ))}
+                        {dayItems.length > 3 && (
+                          <p className="px-1 text-[11px] font-medium text-muted-foreground">
+                            +{dayItems.length - 3} more
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
-                <div className="divide-y divide-border/70 lg:hidden">
-                  {contentQuery.isLoading ? (
-                    <div className="space-y-3 p-4">
-                      <Skeleton className="h-20 w-full rounded-xl" />
-                      <Skeleton className="h-20 w-full rounded-xl" />
-                    </div>
-                  ) : scheduled.length === 0 ? (
-                    <DataState
-                      title="Nothing scheduled this month"
-                      description="Managers can open an idea from the backlog and give it a publish date."
-                    />
-                  ) : scheduled.map((item) => (
-                    <div key={item.id} className="flex gap-3 p-4">
-                      <div className="flex size-11 shrink-0 flex-col items-center justify-center rounded-xl bg-primary/10 text-primary">
-                        <span className="text-[9px] font-semibold uppercase">
-                          {new Date(item.scheduled_at as string).toLocaleDateString(undefined, { month: 'short' })}
-                        </span>
-                        <span className="font-heading text-base font-semibold leading-none">
-                          {new Date(item.scheduled_at as string).getDate()}
-                        </span>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <ContentSummary item={item} onEdit={canManage ? openEdit : undefined} />
-                        <p className="mt-1.5 flex items-center gap-1 px-1 text-[11px] text-muted-foreground">
-                          <Clock3 className="size-3" />
-                          {new Date(item.scheduled_at as string).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          {item.assignee && <> Â· {item.assignee.name}</>}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+            <div className="divide-y divide-border/70 lg:hidden">
+              {scheduled.length === 0 ? (
+                <DataState
+                  title="Nothing scheduled this month"
+                  description="Managers can open an idea from the backlog and give it a publish date."
+                />
+              ) : scheduled.map((item) => (
+                <div key={item.id} className="flex gap-3 p-4">
+                  <div className="flex size-11 shrink-0 flex-col items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <span className="text-[9px] font-semibold uppercase">
+                      {new Date(item.scheduled_at as string).toLocaleDateString(undefined, { month: 'short' })}
+                    </span>
+                    <span className="font-heading text-base font-semibold leading-none">
+                      {new Date(item.scheduled_at as string).getDate()}
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <ContentSummary item={item} onEdit={canManage ? openEdit : undefined} />
+                    <p className="mt-1.5 flex items-center gap-1 px-1 text-[11px] text-muted-foreground">
+                      <Clock3 className="size-3" />
+                      {new Date(item.scheduled_at as string).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {item.assignee && <> · {item.assignee.name}</>}
+                    </p>
+                  </div>
                 </div>
-              </>
-            )}
+              ))}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -751,9 +750,9 @@ export default function MarketingPage() {
       <DeleteConfirmDialog
         open={deleteTarget !== null}
         title={`Delete "${deleteTarget?.title}"?`}
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
-        isDeleting={deleteMutation.isPending}
+        isDeleting={processing}
       />
     </div>
   );

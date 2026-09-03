@@ -16,6 +16,7 @@ class Task extends Model
         'title',
         'description',
         'due_date',
+        'due_time',
         'priority',
         'status',
         'assignee_id',

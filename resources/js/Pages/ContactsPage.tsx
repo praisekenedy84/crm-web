@@ -1,7 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Plus, X } from 'lucide-react';
-import { api, getApiErrorMessage, type Contact } from '../lib/api';
+import { Plus, UserPlus, X } from 'lucide-react';
+import { useSubmit, visitFilters } from '@/lib/submit';
+import { useCan } from '@/hooks/useCan';
+import type { Contact, Account, Paginated } from '@/types';
 import { PageHeader } from '@/Components/PageHeader';
 import { FormCard, FormField, FormGrid, FormSection } from '@/Components/forms';
 import { AreaPicker, formatAreaLocation } from '@/Components/AreaPicker';
@@ -16,11 +17,9 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/Components/ui/table';
-import { Skeleton } from '@/Components/ui/skeleton';
 import { ListToolbar } from '@/Components/ListToolbar';
 import { DataPagination } from '@/Components/DataPagination';
 import { DataState } from '@/Components/DataState';
-import { useFeedback } from '@/Components/Feedback';
 
 const emptyForm = {
   first_name: '',
@@ -31,26 +30,25 @@ const emptyForm = {
   area_id: null as number | null,
 };
 
-export default function ContactsPage() {
-  const queryClient = useQueryClient();
-  const { notify } = useFeedback();
+interface ContactsPageProps {
+  contacts: Paginated<Contact>;
+  accounts: Account[];
+  filters: { search: string };
+}
+
+export default function ContactsPage({ contacts, accounts, filters }: ContactsPageProps) {
+  const { processing, submit } = useSubmit();
+  const { can } = useCan();
+  const canCreate = can('contacts.create');
+  const canUpdate = can('contacts.update');
+  const canDelete = can('contacts.delete');
+  const canCreateLead = can('leads.create');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Contact | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
+  const [creatingLeadId, setCreatingLeadId] = useState<number | null>(null);
   const [form, setForm] = useState(emptyForm);
-  const [page, setPage] = useState(1);
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
-
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['contacts', page, search],
-    queryFn: () => api.getContacts({ page: String(page), ...(search ? { search } : {}) }),
-  });
-
-  const { data: accounts } = useQuery({
-    queryKey: ['accounts'],
-    queryFn: () => api.getAccounts(),
-  });
+  const [searchInput, setSearchInput] = useState(filters.search);
 
   const resetForm = () => setForm(emptyForm);
 
@@ -79,40 +77,39 @@ export default function ContactsPage() {
     });
   };
 
-  const saveMutation = useMutation({
-    mutationFn: () => {
-      const payload = {
-        first_name: form.first_name,
-        last_name: form.last_name,
-        email: form.email || undefined,
-        phone: form.phone || undefined,
-        account_id: form.account_id ? Number(form.account_id) : undefined,
-        area_id: form.area_id ?? undefined,
-      };
-      return editing
-        ? api.updateContact(editing.id, payload)
-        : api.createContact(payload);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['contacts'] });
-      notify(editing ? 'Contact updated.' : 'Contact created.');
-      closeForm();
-    },
-    onError: (error) => notify(getApiErrorMessage(error, 'Contact could not be saved.'), 'error'),
-  });
+  const handleSave = () => {
+    const payload = {
+      first_name: form.first_name,
+      last_name: form.last_name,
+      email: form.email || undefined,
+      phone: form.phone || undefined,
+      account_id: form.account_id ? Number(form.account_id) : undefined,
+      area_id: form.area_id ?? undefined,
+    };
+    if (editing) {
+      submit('put', `/contacts/${editing.id}`, payload, { onSuccess: closeForm });
+    } else {
+      submit('post', '/contacts', payload, { onSuccess: closeForm });
+    }
+  };
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => api.deleteContact(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['contacts'] });
-      notify('Contact deleted.');
-      setDeleteTarget(null);
-    },
-    onError: (error) => notify(getApiErrorMessage(error, 'Contact could not be deleted.'), 'error'),
-  });
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    submit('delete', `/contacts/${deleteTarget.id}`, {}, {
+      onSuccess: () => setDeleteTarget(null),
+    });
+  };
+
+  const handleCreateLead = (contact: Contact) => {
+    setCreatingLeadId(contact.id);
+    submit('post', `/contacts/${contact.id}/create-lead`, {}, {
+      onSuccess: () => setCreatingLeadId(null),
+      onError: () => setCreatingLeadId(null),
+    });
+  };
 
   const handleAccountChange = (accountId: string) => {
-    const account = accounts?.data.find((a) => String(a.id) === accountId);
+    const account = accounts.find((a) => String(a.id) === accountId);
     setForm({
       ...form,
       account_id: accountId,
@@ -129,10 +126,12 @@ export default function ContactsPage() {
         title="Contacts"
         description="Keep customer details, workplaces, and locations ready for every conversation."
         action={
-          <Button variant={isFormOpen ? 'outline' : 'default'} onClick={() => (isFormOpen ? closeForm() : openCreate())}>
-            {isFormOpen ? <X size={16} /> : <Plus size={16} />}
-            {isFormOpen ? 'Close form' : 'New contact'}
-          </Button>
+          (canCreate || isFormOpen) ? (
+            <Button variant={isFormOpen ? 'outline' : 'default'} onClick={() => (isFormOpen ? closeForm() : openCreate())}>
+              {isFormOpen ? <X size={16} /> : <Plus size={16} />}
+              {isFormOpen ? 'Close form' : 'New contact'}
+            </Button>
+          ) : undefined
         }
       />
 
@@ -143,10 +142,10 @@ export default function ContactsPage() {
           onClose={closeForm}
           onSubmit={(e) => {
             e.preventDefault();
-            saveMutation.mutate();
+            handleSave();
           }}
           submitLabel={editing ? 'Update Contact' : 'Save Contact'}
-          isSubmitting={saveMutation.isPending}
+          isSubmitting={processing}
         >
           <FormSection title="Personal Information">
             <FormGrid cols={2}>
@@ -199,15 +198,19 @@ export default function ContactsPage() {
                 <Select
                   value={form.account_id}
                   onValueChange={(value) => value && handleAccountChange(value)}
+                  items={accounts.map((a) => ({
+                    value: String(a.id),
+                    label: `${a.name}${a.area ? ` - ${formatAreaLocation(a.area)}` : ''}`,
+                  }))}
                 >
                   <SelectTrigger id="account_id" className="w-full">
                     <SelectValue placeholder="Select shop or company" />
                   </SelectTrigger>
                   <SelectContent>
-                    {accounts?.data.map((a) => (
+                    {accounts.map((a) => (
                       <SelectItem key={a.id} value={String(a.id)}>
                         {a.name}
-                        {a.area ? ` â€” ${formatAreaLocation(a.area)}` : ''}
+                        {a.area ? ` - ${formatAreaLocation(a.area)}` : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -234,23 +237,13 @@ export default function ContactsPage() {
           value={searchInput}
           onChange={setSearchInput}
           onSearch={(value = searchInput) => {
-            setSearch(value.trim());
-            setPage(1);
+            visitFilters('/contacts', { search: value.trim(), page: 1 });
           }}
           placeholder="Search by name or email"
-          resultLabel={data ? `${data.total} contact${data.total === 1 ? '' : 's'}` : undefined}
+          resultLabel={`${contacts.total} contact${contacts.total === 1 ? '' : 's'}`}
         />
         <CardContent className="p-0">
-          {isError ? (
-            <DataState
-              tone="error"
-              title="Contacts could not be loaded"
-              description="Check your connection and try loading the contact list again."
-              actionLabel="Try again"
-              onAction={() => refetch()}
-            />
-          ) : (
-            <Table>
+          <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -258,58 +251,73 @@ export default function ContactsPage() {
                 <TableHead>Phone</TableHead>
                 <TableHead>Shop / Company</TableHead>
                 <TableHead>Location</TableHead>
-                <ActionsTableHead />
+                <ActionsTableHead className="w-[140px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                    <Skeleton className="mx-auto h-4 w-24" />
-                  </TableCell>
-                </TableRow>
-              ) : data?.data.length === 0 ? (
+              {contacts.data.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="p-0">
                     <DataState
                       compact
-                      title={search ? 'No contacts match this search' : 'No contacts yet'}
-                      description={search ? 'Try a different name or email.' : 'Create your first contact to start building customer context.'}
-                      actionLabel={search ? 'Clear search' : 'Create contact'}
-                      onAction={() => search ? (setSearch(''), setSearchInput(''), setPage(1)) : openCreate()}
+                      title={filters.search ? 'No contacts match this search' : 'No contacts yet'}
+                      description={filters.search ? 'Try a different name or email.' : 'Create your first contact to start building customer context.'}
+                      actionLabel={filters.search ? 'Clear search' : 'Create contact'}
+                      onAction={() => filters.search
+                        ? (setSearchInput(''), visitFilters('/contacts', { search: '', page: 1 }))
+                        : openCreate()}
                     />
                   </TableCell>
                 </TableRow>
-              ) : data?.data.map((c) => (
+              ) : contacts.data.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell className="font-medium">{c.first_name} {c.last_name}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.email || 'â€”'}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.phone || 'â€”'}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.account?.name || 'â€”'}</TableCell>
+                  <TableCell className="text-muted-foreground">{c.email || '-'}</TableCell>
+                  <TableCell className="text-muted-foreground">{c.phone || '-'}</TableCell>
+                  <TableCell className="text-muted-foreground">{c.account?.name || '-'}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {formatAreaLocation(c.area ?? c.account?.area)}
                   </TableCell>
                   <TableCell>
                     <RowActions
-                      onEdit={() => openEdit(c)}
-                      onDelete={() => setDeleteTarget(c)}
+                      onEdit={canUpdate ? () => openEdit(c) : undefined}
+                      onDelete={canDelete ? () => setDeleteTarget(c) : undefined}
+                      extra={
+                        canCreateLead ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleCreateLead(c)}
+                            disabled={creatingLeadId !== null}
+                            aria-busy={creatingLeadId === c.id}
+                            aria-label={`Create lead from ${c.first_name} ${c.last_name}`}
+                          >
+                            <UserPlus size={16} />
+                            {creatingLeadId === c.id ? 'Creating...' : 'Lead'}
+                          </Button>
+                        ) : undefined
+                      }
                     />
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
-            </Table>
-          )}
+          </Table>
         </CardContent>
-        {data && <DataPagination page={data.current_page} lastPage={data.last_page} total={data.total} onPageChange={setPage} />}
+        <DataPagination
+          page={contacts.current_page}
+          lastPage={contacts.last_page}
+          total={contacts.total}
+          onPageChange={(page) => visitFilters('/contacts', { search: filters.search, page })}
+        />
       </Card>
 
       <DeleteConfirmDialog
         open={deleteTarget !== null}
         title={`Delete ${deleteTarget?.first_name} ${deleteTarget?.last_name}?`}
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
-        isDeleting={deleteMutation.isPending}
+        isDeleting={processing}
       />
     </div>
   );

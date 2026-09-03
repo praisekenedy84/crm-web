@@ -4,7 +4,115 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+type SelectRootProps = React.ComponentProps<typeof SelectPrimitive.Root>
+type SelectItemOption = { value: any; label: React.ReactNode }
+
+const SelectItemsContext = React.createContext<SelectItemOption[]>([])
+const SelectItemsRegisterContext = React.createContext<
+  ((items: SelectItemOption[]) => void) | null
+>(null)
+
+function isSelectItemType(type: React.ElementType | string): boolean {
+  if (typeof type === "string") return false
+  const candidate = type as { __selectItem?: boolean; displayName?: string; name?: string }
+  return candidate.__selectItem === true
+    || candidate.displayName === "SelectItem"
+    || candidate.name === "SelectItem"
+}
+
+function collectSelectItems(node: React.ReactNode, out: SelectItemOption[]) {
+  React.Children.forEach(node, (child) => {
+    if (!React.isValidElement<{ children?: React.ReactNode; value?: any; label?: React.ReactNode }>(child)) {
+      return
+    }
+
+    if (isSelectItemType(child.type)) {
+      out.push({
+        value: child.props.value,
+        label: child.props.label ?? child.props.children,
+      })
+      return
+    }
+
+    if (child.props.children != null) {
+      collectSelectItems(child.props.children, out)
+    }
+  })
+}
+
+function itemsEqual(a: SelectItemOption[], b: SelectItemOption[]) {
+  if (a.length !== b.length) return false
+  return a.every((item, index) => (
+    String(item.value) === String(b[index]?.value)
+    && item.label === b[index]?.label
+  ))
+}
+
+function labelForValue(items: SelectItemOption[], value: any) {
+  if (value == null || value === "") return null
+  const match = items.find((item) => String(item.value) === String(value))
+  return match?.label ?? null
+}
+
+function toItemOptions(
+  items: SelectRootProps["items"],
+  fallback: SelectItemOption[],
+): SelectItemOption[] {
+  if (Array.isArray(items)) {
+    return items as SelectItemOption[]
+  }
+  if (items && typeof items === "object") {
+    return Object.entries(items).map(([value, label]) => ({ value, label }))
+  }
+  return fallback
+}
+
+function Select({
+  items,
+  children,
+  value,
+  defaultValue,
+  onValueChange,
+  ...props
+}: Omit<SelectRootProps, "items" | "value" | "defaultValue" | "onValueChange"> & {
+  items?: SelectItemOption[] | Record<string, React.ReactNode>
+  value?: string | null
+  defaultValue?: string | null
+  onValueChange?: (value: string | null, ...args: any[]) => void
+  children?: React.ReactNode
+}) {
+  const [registeredItems, setRegisteredItems] = React.useState<SelectItemOption[]>([])
+
+  const registerItems = React.useCallback((next: SelectItemOption[]) => {
+    setRegisteredItems((prev) => (itemsEqual(prev, next) ? prev : next))
+  }, [])
+
+  const derivedFromChildren = React.useMemo(() => {
+    const collected: SelectItemOption[] = []
+    collectSelectItems(children, collected)
+    return collected
+  }, [children])
+
+  const fallbackItems = registeredItems.length > 0 ? registeredItems : derivedFromChildren
+  const labelItems = toItemOptions(items, fallbackItems)
+  const resolvedItems = items ?? (fallbackItems.length > 0 ? fallbackItems : undefined)
+
+  return (
+    <SelectItemsRegisterContext.Provider value={registerItems}>
+      <SelectItemsContext.Provider value={labelItems}>
+        <SelectPrimitive.Root
+          items={resolvedItems as SelectRootProps["items"]}
+          value={value}
+          defaultValue={defaultValue}
+          onValueChange={onValueChange as SelectRootProps["onValueChange"]}
+          {...props}
+        >
+          {children}
+        </SelectPrimitive.Root>
+      </SelectItemsContext.Provider>
+    </SelectItemsRegisterContext.Provider>
+  )
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (
@@ -16,13 +124,23 @@ function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   )
 }
 
-function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
+function SelectValue({ className, children, placeholder, ...props }: SelectPrimitive.Value.Props) {
+  const items = React.useContext(SelectItemsContext)
+
   return (
     <SelectPrimitive.Value
       data-slot="select-value"
       className={cn("flex flex-1 text-left", className)}
+      placeholder={placeholder}
       {...props}
-    />
+    >
+      {children ?? ((value: any) => {
+        const label = labelForValue(items, value)
+        if (label != null) return label
+        if (value == null || value === "") return placeholder ?? null
+        return String(value)
+      })}
+    </SelectPrimitive.Value>
   )
 }
 
@@ -68,6 +186,15 @@ function SelectContent({
     SelectPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset" | "alignItemWithTrigger"
   >) {
+  const registerItems = React.useContext(SelectItemsRegisterContext)
+
+  React.useLayoutEffect(() => {
+    if (!registerItems) return
+    const collected: SelectItemOption[] = []
+    collectSelectItems(children, collected)
+    registerItems(collected)
+  }, [children, registerItems])
+
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Positioner
@@ -133,6 +260,8 @@ function SelectItem({
     </SelectPrimitive.Item>
   )
 }
+SelectItem.displayName = "SelectItem"
+;(SelectItem as unknown as { __selectItem: boolean }).__selectItem = true
 
 function SelectSeparator({
   className,

@@ -1,7 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2, X } from 'lucide-react';
-import { api, getApiErrorMessage, type Deal, type Pipeline, type PipelineStage } from '../lib/api';
+import { useSubmit, visitFilters } from '@/lib/submit';
+import { useCan } from '@/hooks/useCan';
+import type { Deal, DealLineItem, KanbanData, Pipeline, PipelineStage, Product, Service } from '@/types';
 import { FormCard, FormField, FormGrid, FormSection } from '@/Components/forms';
 import { DeleteConfirmDialog } from '@/Components/DeleteConfirmDialog';
 import { Button } from '@/Components/ui/button';
@@ -11,22 +12,62 @@ import { Card, CardContent } from '@/Components/ui/card';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/Components/ui/select';
-import { Skeleton } from '@/Components/ui/skeleton';
 import { DataState } from '@/Components/DataState';
 import { PageHeader } from '@/Components/PageHeader';
 import { CloseDealDialog } from '@/Components/CloseDealDialog';
-import { useFeedback } from '@/Components/Feedback';
+
+type LineDraft = {
+  key: string;
+  kind: 'custom' | 'product' | 'service';
+  description: string;
+  quantity: string;
+  unit_price: string;
+  product_id: string;
+  service_id: string;
+};
+
+const emptyLine = (): LineDraft => ({
+  key: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  kind: 'custom',
+  description: '',
+  quantity: '1',
+  unit_price: '',
+  product_id: '',
+  service_id: '',
+});
 
 const emptyForm = {
   name: '',
-  value: '',
   expected_close_date: '',
   stage_id: '',
+  lines: [emptyLine()] as LineDraft[],
 };
 
-export default function DealsPage() {
-  const queryClient = useQueryClient();
-  const { notify } = useFeedback();
+interface DealsPageProps {
+  pipelines: Pipeline[];
+  pipelineId: number | null;
+  kanban: KanbanData | null;
+  products: Product[];
+  services: Service[];
+}
+
+function lineTotal(line: LineDraft): number {
+  return (Number(line.quantity) || 0) * (Number(line.unit_price) || 0);
+}
+
+export default function DealsPage({
+  pipelines,
+  pipelineId,
+  kanban,
+  products = [],
+  services = [],
+}: DealsPageProps) {
+  const { processing, submit } = useSubmit();
+  const { can } = useCan();
+  const canCreate = can('deals.create');
+  const canUpdate = can('deals.update');
+  const canDelete = can('deals.delete');
+  const canMove = can('deals.move_stage');
   const [draggedDeal, setDraggedDeal] = useState<Deal | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Deal | null>(null);
@@ -35,28 +76,19 @@ export default function DealsPage() {
   const [pendingMove, setPendingMove] = useState<{ deal: Deal; stage: PipelineStage } | null>(null);
   const [closeReason, setCloseReason] = useState('');
 
-  const { data: pipelines, isLoading: pipelinesLoading, isError: pipelinesError, refetch: refetchPipelines } = useQuery({
-    queryKey: ['pipelines'],
-    queryFn: api.getPipelines,
-  });
-
-  const [selectedPipeline, setSelectedPipeline] = useState<number | null>(null);
-  const pipelineId = selectedPipeline ?? pipelines?.[0]?.id;
-  const currentPipeline = pipelines?.find((p) => p.id === pipelineId);
-
-  const { data: kanban, isLoading, isError: kanbanError, refetch: refetchKanban } = useQuery({
-    queryKey: ['deals-kanban', pipelineId],
-    queryFn: () => api.getDealsKanban(pipelineId!),
-    enabled: !!pipelineId,
-  });
+  const currentPipeline = pipelines.find((p) => p.id === pipelineId);
+  const dealValue = useMemo(
+    () => form.lines.reduce((sum, line) => sum + lineTotal(line), 0),
+    [form.lines],
+  );
 
   const resetForm = () => {
     const firstStage = currentPipeline?.stages?.[0];
     setForm({
       name: '',
-      value: '',
       expected_close_date: '',
       stage_id: firstStage ? String(firstStage.id) : '',
+      lines: [emptyLine()],
     });
   };
 
@@ -72,65 +104,106 @@ export default function DealsPage() {
     setShowForm(true);
   };
 
+  const toLineDraft = (line: DealLineItem): LineDraft => ({
+    key: String(line.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
+    kind: line.product_id ? 'product' : line.service_id ? 'service' : 'custom',
+    description: line.description,
+    quantity: String(line.quantity ?? 1),
+    unit_price: String(line.unit_price ?? 0),
+    product_id: line.product_id ? String(line.product_id) : '',
+    service_id: line.service_id ? String(line.service_id) : '',
+  });
+
   const openEdit = (deal: Deal) => {
     setShowForm(false);
     setEditing(deal);
     setForm({
       name: deal.name,
-      value: String(deal.value),
       expected_close_date: deal.expected_close_date?.slice(0, 10) ?? '',
       stage_id: String(deal.stage_id),
+      lines: deal.line_items?.length
+        ? deal.line_items.map(toLineDraft)
+        : [emptyLine()],
     });
   };
 
-  const saveMutation = useMutation({
-    mutationFn: () => {
-      const payload = {
-        name: form.name,
-        value: Number(form.value) || 0,
-        expected_close_date: form.expected_close_date || undefined,
-      };
-      if (editing) {
-        return api.updateDeal(editing.id, payload);
-      }
-      return api.createDeal({
-        pipeline_id: pipelineId!,
+  const updateLine = (key: string, patch: Partial<LineDraft>) => {
+    setForm((prev) => ({
+      ...prev,
+      lines: prev.lines.map((line) => (line.key === key ? { ...line, ...patch } : line)),
+    }));
+  };
+
+  const applyCatalog = (key: string, kind: 'product' | 'service', id: string) => {
+    if (kind === 'product') {
+      const product = products.find((p) => String(p.id) === id);
+      updateLine(key, {
+        kind: 'product',
+        product_id: id,
+        service_id: '',
+        description: product?.name ?? '',
+        unit_price: product ? String(product.unit_price) : '',
+      });
+      return;
+    }
+
+    const service = services.find((s) => String(s.id) === id);
+    updateLine(key, {
+      kind: 'service',
+      service_id: id,
+      product_id: '',
+      description: service?.name ?? '',
+      unit_price: service ? String(service.price) : '',
+    });
+  };
+
+  const handleSave = () => {
+    const lines = form.lines
+      .filter((line) => line.description.trim() || line.product_id || line.service_id)
+      .map((line) => ({
+        description: line.description.trim(),
+        quantity: Number(line.quantity) || 0,
+        unit_price: Number(line.unit_price) || 0,
+        product_id: line.kind === 'product' && line.product_id ? Number(line.product_id) : undefined,
+        service_id: line.kind === 'service' && line.service_id ? Number(line.service_id) : undefined,
+      }));
+
+    const payload = {
+      name: form.name,
+      value: dealValue,
+      expected_close_date: form.expected_close_date || undefined,
+      lines,
+    };
+
+    if (editing) {
+      submit('put', `/deals/${editing.id}`, payload, { onSuccess: closeForm });
+    } else {
+      submit('post', '/deals', {
+        pipeline_id: pipelineId,
         stage_id: Number(form.stage_id),
         ...payload,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['deals-kanban'] });
-      queryClient.invalidateQueries({ queryKey: ['pipeline-summary'] });
-      notify(editing ? 'Deal updated.' : 'Deal created.');
-      closeForm();
-    },
-    onError: (error) => notify(getApiErrorMessage(error, 'Deal could not be saved.'), 'error'),
-  });
+      }, { onSuccess: closeForm });
+    }
+  };
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => api.deleteDeal(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['deals-kanban'] });
-      queryClient.invalidateQueries({ queryKey: ['pipeline-summary'] });
-      notify('Deal deleted.');
-      setDeleteTarget(null);
-    },
-    onError: (error) => notify(getApiErrorMessage(error, 'Deal could not be deleted.'), 'error'),
-  });
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    submit('delete', `/deals/${deleteTarget.id}`, {}, {
+      onSuccess: () => setDeleteTarget(null),
+    });
+  };
 
-  const moveMutation = useMutation({
-    mutationFn: ({ dealId, stageId, reason }: { dealId: number; stageId: number; reason?: string }) =>
-      api.updateDealStage(dealId, stageId, reason),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['deals-kanban'] });
-      queryClient.invalidateQueries({ queryKey: ['pipeline-summary'] });
-      notify('Deal stage updated.');
-      setPendingMove(null);
-      setCloseReason('');
-    },
-    onError: (error) => notify(getApiErrorMessage(error, 'Deal stage could not be updated.'), 'error'),
-  });
+  const moveDeal = (dealId: number, stageId: number, reason?: string) => {
+    submit('patch', `/deals/${dealId}/stage`, {
+      stage_id: stageId,
+      win_loss_reason: reason || undefined,
+    }, {
+      onSuccess: () => {
+        setPendingMove(null);
+        setCloseReason('');
+      },
+    });
+  };
 
   const formatCurrency = (n: number, currency = 'TZS') =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
@@ -144,7 +217,7 @@ export default function DealsPage() {
       setCloseReason('');
       return;
     }
-    moveMutation.mutate({ dealId: deal.id, stageId });
+    moveDeal(deal.id, stageId);
   };
 
   const handleDrop = (stageId: number) => {
@@ -153,36 +226,6 @@ export default function DealsPage() {
   };
 
   const isFormOpen = showForm || editing !== null;
-
-  if (pipelinesLoading || isLoading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="flex flex-col gap-4 lg:flex-row">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-64 w-full rounded-xl lg:flex-1" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (pipelinesError || kanbanError) {
-    return (
-      <div className="space-y-6">
-        <PageHeader eyebrow="Revenue" title="Sales pipeline" description="Move opportunities forward and keep every outcome accountable." />
-        <Card className="border-0 ring-1 ring-border/70">
-          <DataState
-            tone="error"
-            title="Pipeline could not be loaded"
-            description="Check your connection and try loading the pipeline again."
-            actionLabel="Try again"
-            onAction={() => pipelinesError ? refetchPipelines() : refetchKanban()}
-          />
-        </Card>
-      </div>
-    );
-  }
 
   if (!pipelineId || !currentPipeline) {
     return (
@@ -203,13 +246,14 @@ export default function DealsPage() {
       <PageHeader
         eyebrow="Revenue"
         title="Sales pipeline"
-        description="Move opportunities forward by drag, touch, or keyboardâ€”and capture why every deal closes."
+        description="Attach products or services to each deal, then move it to Won to record the sale."
         action={
           <>
-          {pipelines && pipelines.length > 1 && (
+          {pipelines.length > 1 && (
             <Select
               value={String(pipelineId)}
-              onValueChange={(value) => setSelectedPipeline(Number(value))}
+              onValueChange={(value) => visitFilters('/deals', { pipeline_id: Number(value) })}
+              items={pipelines.map((p) => ({ value: String(p.id), label: p.name }))}
             >
               <SelectTrigger className="w-full sm:w-48">
                 <SelectValue />
@@ -221,10 +265,12 @@ export default function DealsPage() {
               </SelectContent>
             </Select>
           )}
-          <Button variant={isFormOpen ? 'outline' : 'default'} onClick={() => (isFormOpen ? closeForm() : openCreate())}>
-            {isFormOpen ? <X size={16} /> : <Plus size={16} />}
-            {isFormOpen ? 'Close form' : 'New deal'}
-          </Button>
+          {(canCreate || isFormOpen) && (
+            <Button variant={isFormOpen ? 'outline' : 'default'} onClick={() => (isFormOpen ? closeForm() : openCreate())}>
+              {isFormOpen ? <X size={16} /> : <Plus size={16} />}
+              {isFormOpen ? 'Close form' : 'New deal'}
+            </Button>
+          )}
           </>
         }
       />
@@ -232,13 +278,14 @@ export default function DealsPage() {
       {isFormOpen && (
         <FormCard
           title={editing ? 'Edit Deal' : 'Add Deal'}
+          description="Add line items for software or services. Deal value is the sum of the lines."
           onClose={closeForm}
           onSubmit={(e) => {
             e.preventDefault();
-            saveMutation.mutate();
+            handleSave();
           }}
           submitLabel={editing ? 'Update Deal' : 'Save Deal'}
-          isSubmitting={saveMutation.isPending}
+          isSubmitting={processing}
         >
           <FormSection title="Deal Details">
             <FormGrid cols={2}>
@@ -250,14 +297,8 @@ export default function DealsPage() {
                   required
                 />
               </FormField>
-              <FormField label="Value" htmlFor="deal_value" required>
-                <Input
-                  id="deal_value"
-                  type="number"
-                  value={form.value}
-                  onChange={(e) => setForm({ ...form, value: e.target.value })}
-                  required
-                />
+              <FormField label="Deal value" hint="Calculated from line items">
+                <Input value={formatCurrency(dealValue)} readOnly />
               </FormField>
               <FormField label="Expected close" htmlFor="deal_close">
                 <Input
@@ -272,6 +313,7 @@ export default function DealsPage() {
                   <Select
                     value={form.stage_id}
                     onValueChange={(value) => value && setForm({ ...form, stage_id: value })}
+                    items={currentPipeline.stages.map((s) => ({ value: String(s.id), label: s.name }))}
                   >
                     <SelectTrigger id="deal_stage" className="w-full">
                       <SelectValue placeholder="Select stage" />
@@ -285,6 +327,154 @@ export default function DealsPage() {
                 </FormField>
               )}
             </FormGrid>
+          </FormSection>
+
+          <FormSection title="What is being sold">
+            <div className="space-y-3">
+              {form.lines.map((line, index) => (
+                <div key={line.key} className="rounded-xl border border-border/70 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium">Line {index + 1}</p>
+                    {form.lines.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Remove line"
+                        onClick={() => setForm({ ...form, lines: form.lines.filter((l) => l.key !== line.key) })}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                  <FormGrid cols={2}>
+                    <FormField label="Type" htmlFor={`line_kind_${line.key}`}>
+                      <Select
+                        value={line.kind}
+                        onValueChange={(value) => {
+                          if (!value) return;
+                          updateLine(line.key, {
+                            kind: value as LineDraft['kind'],
+                            product_id: '',
+                            service_id: '',
+                            description: value === 'custom' ? line.description : '',
+                            unit_price: value === 'custom' ? line.unit_price : '',
+                          });
+                        }}
+                        items={[
+                          { value: 'product', label: 'Product (software / goods)' },
+                          { value: 'service', label: 'Service' },
+                          { value: 'custom', label: 'Custom line' },
+                        ]}
+                      >
+                        <SelectTrigger id={`line_kind_${line.key}`} className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="product">Product (software / goods)</SelectItem>
+                          <SelectItem value="service">Service</SelectItem>
+                          <SelectItem value="custom">Custom line</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormField>
+
+                    {line.kind === 'product' && (
+                      <FormField label="Product" htmlFor={`line_product_${line.key}`}>
+                        <Select
+                          value={line.product_id}
+                          onValueChange={(value) => value && applyCatalog(line.key, 'product', value)}
+                          items={products.map((p) => ({
+                            value: String(p.id),
+                            label: `${p.name}${p.sku ? ` (${p.sku})` : ''}`,
+                          }))}
+                        >
+                          <SelectTrigger id={`line_product_${line.key}`} className="w-full">
+                            <SelectValue placeholder="Select product" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {products.map((p) => (
+                              <SelectItem key={p.id} value={String(p.id)}>
+                                {p.name}{p.sku ? ` (${p.sku})` : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormField>
+                    )}
+
+                    {line.kind === 'service' && (
+                      <FormField label="Service" htmlFor={`line_service_${line.key}`}>
+                        <Select
+                          value={line.service_id}
+                          onValueChange={(value) => value && applyCatalog(line.key, 'service', value)}
+                          items={services.map((s) => ({
+                            value: String(s.id),
+                            label: `${s.name} · ${s.billing_cycle}`,
+                          }))}
+                        >
+                          <SelectTrigger id={`line_service_${line.key}`} className="w-full">
+                            <SelectValue placeholder="Select service" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {services.map((s) => (
+                              <SelectItem key={s.id} value={String(s.id)}>
+                                {s.name} · {s.billing_cycle}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormField>
+                    )}
+
+                    <FormField
+                      label="Description"
+                      htmlFor={`line_desc_${line.key}`}
+                      className={line.kind === 'custom' ? 'sm:col-span-2' : undefined}
+                    >
+                      <Input
+                        id={`line_desc_${line.key}`}
+                        value={line.description}
+                        onChange={(e) => updateLine(line.key, { description: e.target.value })}
+                        placeholder="What is being sold"
+                      />
+                    </FormField>
+                    <FormField label="Qty" htmlFor={`line_qty_${line.key}`}>
+                      <Input
+                        id={`line_qty_${line.key}`}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={line.quantity}
+                        onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
+                      />
+                    </FormField>
+                    <FormField label="Unit price" htmlFor={`line_price_${line.key}`}>
+                      <Input
+                        id={`line_price_${line.key}`}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={line.unit_price}
+                        onChange={(e) => updateLine(line.key, { unit_price: e.target.value })}
+                      />
+                    </FormField>
+                    <FormField label="Line total">
+                      <Input value={formatCurrency(lineTotal(line))} readOnly />
+                    </FormField>
+                  </FormGrid>
+                </div>
+              ))}
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setForm({ ...form, lines: [...form.lines, emptyLine()] })}
+              >
+                <Plus size={14} />
+                Add line
+              </Button>
+            </div>
           </FormSection>
         </FormCard>
       )}
@@ -314,36 +504,52 @@ export default function DealsPage() {
                   deals.map((deal: Deal) => (
                     <Card
                       key={deal.id}
-                      draggable
-                      onDragStart={() => setDraggedDeal(deal)}
-                      className="cursor-grab border-0 shadow-sm ring-1 ring-border/70 active:cursor-grabbing"
+                      draggable={canMove}
+                      onDragStart={() => canMove && setDraggedDeal(deal)}
+                      className={canMove ? 'cursor-grab border-0 shadow-sm ring-1 ring-border/70 active:cursor-grabbing' : 'border-0 shadow-sm ring-1 ring-border/70'}
                     >
                       <CardContent className="pt-4">
                         <div className="flex items-start justify-between gap-2">
                           <p className="font-medium">{deal.name}</p>
                           <div className="flex shrink-0 gap-0.5">
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              onClick={() => openEdit(deal)}
-                              aria-label="Edit deal"
-                            >
-                              <Pencil className="size-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              onClick={() => setDeleteTarget(deal)}
-                              aria-label="Delete deal"
-                              className="text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="size-3.5" />
-                            </Button>
+                            {canUpdate && (
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={() => openEdit(deal)}
+                                aria-label="Edit deal"
+                              >
+                                <Pencil className="size-3.5" />
+                              </Button>
+                            )}
+                            {canDelete && (
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={() => setDeleteTarget(deal)}
+                                aria-label="Delete deal"
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                         <p className="mt-1 text-sm font-semibold text-primary">
                           {formatCurrency(Number(deal.value), deal.currency)}
                         </p>
+                        {deal.line_items && deal.line_items.length > 0 && (
+                          <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
+                            {deal.line_items.slice(0, 3).map((line) => (
+                              <li key={line.id ?? line.description}>
+                                {line.quantity} × {line.description}
+                              </li>
+                            ))}
+                            {deal.line_items.length > 3 && (
+                              <li>+{deal.line_items.length - 3} more</li>
+                            )}
+                          </ul>
+                        )}
                         {deal.account && (
                           <p className="mt-2 text-xs text-muted-foreground">{deal.account.name}</p>
                         )}
@@ -356,13 +562,20 @@ export default function DealsPage() {
                           <Select
                             value={String(deal.stage_id)}
                             onValueChange={(value) => value && requestMove(deal, Number(value))}
-                            disabled={moveMutation.isPending}
+                            disabled={processing}
+                            items={(currentPipeline?.stages ?? []).map((item) => ({
+                              value: String(item.id),
+                              label: item.name,
+                            }))}
                           >
                             <SelectTrigger className="h-8 w-full text-xs" aria-label={`Move ${deal.name} to another stage`}>
-                              <SelectValue />
+                              <SelectValue>
+                                {(currentPipeline?.stages ?? []).find((item) => item.id === deal.stage_id)?.name
+                                  ?? deal.stage?.name}
+                              </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
-                              {currentPipeline.stages.map((item) => (
+                              {(currentPipeline?.stages ?? []).map((item) => (
                                 <SelectItem key={item.id} value={String(item.id)}>{item.name}</SelectItem>
                               ))}
                             </SelectContent>
@@ -381,9 +594,9 @@ export default function DealsPage() {
       <DeleteConfirmDialog
         open={deleteTarget !== null}
         title={`Delete "${deleteTarget?.name}"?`}
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
-        isDeleting={deleteMutation.isPending}
+        isDeleting={processing}
       />
       <CloseDealDialog
         open={pendingMove !== null}
@@ -397,13 +610,9 @@ export default function DealsPage() {
         }}
         onConfirm={() => {
           if (!pendingMove) return;
-          moveMutation.mutate({
-            dealId: pendingMove.deal.id,
-            stageId: pendingMove.stage.id,
-            reason: closeReason.trim(),
-          });
+          moveDeal(pendingMove.deal.id, pendingMove.stage.id, closeReason.trim());
         }}
-        isSubmitting={moveMutation.isPending}
+        isSubmitting={processing}
       />
     </div>
   );

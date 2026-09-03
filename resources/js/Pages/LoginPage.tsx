@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Head, useForm } from '@inertiajs/react';
 import { Eye, EyeOff, ShieldCheck, Sparkles } from 'lucide-react';
+import { BrandLogo } from '@/Components/BrandLogo';
 import { FormField } from '@/Components/forms';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
@@ -33,10 +34,7 @@ export default function LoginPage() {
         <div className="pointer-events-none absolute -right-40 -top-40 size-[34rem] rounded-full border border-white/10" />
         <div className="pointer-events-none absolute -right-24 -top-24 size-[22rem] rounded-full border border-white/10" />
         <div className="flex items-center gap-3">
-          <div className="relative flex size-10 items-center justify-center rounded-xl bg-sidebar-primary text-lg font-bold text-sidebar-primary-foreground">
-            N
-            <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-emerald-300" />
-          </div>
+          <BrandLogo size={40} className="size-10 shrink-0 rounded-xl object-cover shadow-lg shadow-black/25" />
           <div>
             <span className="font-heading text-lg font-semibold text-white">Northstar</span>
             <p className="text-[10px] tracking-[0.16em] text-sidebar-foreground/45 uppercase">Revenue desk</p>
@@ -72,10 +70,7 @@ export default function LoginPage() {
         <Card className="w-full max-w-md border-0 bg-card shadow-2xl shadow-foreground/10 ring-1 ring-border/70">
           <CardHeader className="px-6 pt-7 text-left sm:px-8 sm:pt-8">
             <div className="mb-5 flex items-center gap-2.5 lg:hidden">
-              <div className="relative flex size-9 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground">
-                N
-                <span className="absolute right-1 top-1 size-1 rounded-full bg-emerald-300" />
-              </div>
+              <BrandLogo size={36} className="size-9 shrink-0 rounded-xl object-cover shadow-md shadow-foreground/10" />
               <span className="font-heading text-base font-semibold">Northstar</span>
             </div>
             <CardTitle className="font-heading text-2xl font-semibold tracking-[-0.035em]">Welcome back</CardTitle>

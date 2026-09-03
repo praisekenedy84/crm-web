@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
-import { api, type Project } from '../lib/api';
+import { useSubmit } from '@/lib/submit';
+import type { Paginated, Project } from '@/types';
 import { PageHeader } from '@/Components/PageHeader';
 import { FormCard, FormField, FormGrid, FormSection } from '@/Components/forms';
 import { DeleteConfirmDialog } from '@/Components/DeleteConfirmDialog';
@@ -15,7 +15,6 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/Components/ui/table';
-import { Skeleton } from '@/Components/ui/skeleton';
 
 const emptyForm = {
   name: '',
@@ -24,17 +23,16 @@ const emptyForm = {
   status: 'planning',
 };
 
-export default function ProjectsPage() {
-  const queryClient = useQueryClient();
+interface ProjectsPageProps {
+  projects: Paginated<Project>;
+}
+
+export default function ProjectsPage({ projects }: ProjectsPageProps) {
+  const { processing, submit } = useSubmit();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
   const [form, setForm] = useState(emptyForm);
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => api.getProjects(),
-  });
 
   const resetForm = () => setForm(emptyForm);
 
@@ -61,31 +59,26 @@ export default function ProjectsPage() {
     });
   };
 
-  const saveMutation = useMutation({
-    mutationFn: () => {
-      const payload = {
-        name: form.name,
-        description: form.description || undefined,
-        budget: form.budget ? Number(form.budget) : undefined,
-        status: form.status,
-      };
-      return editing
-        ? api.updateProject(editing.id, payload)
-        : api.createProject(payload);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
-      closeForm();
-    },
-  });
+  const handleSave = () => {
+    const payload = {
+      name: form.name,
+      description: form.description || undefined,
+      budget: form.budget ? Number(form.budget) : undefined,
+      status: form.status,
+    };
+    if (editing) {
+      submit('put', `/projects/${editing.id}`, payload, { onSuccess: closeForm });
+    } else {
+      submit('post', '/projects', payload, { onSuccess: closeForm });
+    }
+  };
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => api.deleteProject(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
-      setDeleteTarget(null);
-    },
-  });
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    submit('delete', `/projects/${deleteTarget.id}`, {}, {
+      onSuccess: () => setDeleteTarget(null),
+    });
+  };
 
   const fmt = (n: number, currency = 'TZS') =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
@@ -112,10 +105,10 @@ export default function ProjectsPage() {
           onClose={closeForm}
           onSubmit={(e) => {
             e.preventDefault();
-            saveMutation.mutate();
+            handleSave();
           }}
           submitLabel={editing ? 'Update Project' : 'Save Project'}
-          isSubmitting={saveMutation.isPending}
+          isSubmitting={processing}
         >
           <FormSection title="Project Details">
             <FormGrid cols={2}>
@@ -141,6 +134,13 @@ export default function ProjectsPage() {
                 <Select
                   value={form.status}
                   onValueChange={(value) => value && setForm({ ...form, status: value })}
+                  items={[
+                    { value: 'planning', label: 'Planning' },
+                    { value: 'active', label: 'Active' },
+                    { value: 'on_hold', label: 'On hold' },
+                    { value: 'completed', label: 'Completed' },
+                    { value: 'cancelled', label: 'Cancelled' },
+                  ]}
                 >
                   <SelectTrigger id="project_status" className="w-full">
                     <SelectValue />
@@ -181,17 +181,11 @@ export default function ProjectsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center">
-                    <Skeleton className="mx-auto h-4 w-24" />
-                  </TableCell>
-                </TableRow>
-              ) : data?.data.map((p) => (
+              {projects.data.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell className="font-medium">{p.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{p.manager?.name ?? 'â€”'}</TableCell>
-                  <TableCell>{p.budget != null ? fmt(p.budget, p.currency) : 'â€”'}</TableCell>
+                  <TableCell className="text-muted-foreground">{p.manager?.name ?? '-'}</TableCell>
+                  <TableCell>{p.budget != null ? fmt(p.budget, p.currency) : '-'}</TableCell>
                   <TableCell>{fmt(p.actual_cost ?? 0, p.currency)}</TableCell>
                   <TableCell className="capitalize text-muted-foreground">{p.status}</TableCell>
                   <TableCell>
@@ -210,9 +204,9 @@ export default function ProjectsPage() {
       <DeleteConfirmDialog
         open={deleteTarget !== null}
         title={`Delete ${deleteTarget?.name}?`}
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
-        isDeleting={deleteMutation.isPending}
+        isDeleting={processing}
       />
     </div>
   );

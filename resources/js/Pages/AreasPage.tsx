@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronRight, MapPin, Plus } from 'lucide-react';
-import { api, getApiErrorMessage, type Area } from '../lib/api';
+import { useSubmit } from '@/lib/submit';
+import type { Area } from '@/types';
 import { PageHeader } from '@/Components/PageHeader';
 import { FormCard, FormField, FormGrid, FormSection } from '@/Components/forms';
 import { ActionsTableHead, RowActions } from '@/Components/RowActions';
@@ -11,15 +11,16 @@ import { Card, CardContent } from '@/Components/ui/card';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/Components/ui/table';
-import { Skeleton } from '@/Components/ui/skeleton';
 import { DataState } from '@/Components/DataState';
-import { useFeedback } from '@/Components/Feedback';
 
 const LEVELS = ['region', 'district', 'ward', 'street'] as const;
 
-export default function AreasPage() {
-  const queryClient = useQueryClient();
-  const { notify } = useFeedback();
+interface AreasPageProps {
+  areas: Area[];
+}
+
+export default function AreasPage({ areas }: AreasPageProps) {
+  const { processing, submit } = useSubmit();
   const [path, setPath] = useState<Area[]>([]);
   const [showStreetForm, setShowStreetForm] = useState(false);
   const [editingArea, setEditingArea] = useState<Area | null>(null);
@@ -29,40 +30,37 @@ export default function AreasPage() {
   const parent = path[path.length - 1] ?? null;
   const parentId = parent?.id ?? null;
 
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['areas', level, parentId],
-    queryFn: () =>
-      api.getAreas({
-        level,
-        ...(parentId ? { parent_id: String(parentId) } : {}),
-      }),
-  });
+  const filtered = useMemo(
+    () =>
+      areas.filter(
+        (a) =>
+          a.level === level &&
+          (parentId === null ? !a.parent_area_id : a.parent_area_id === parentId),
+      ),
+    [areas, level, parentId],
+  );
 
-  const createStreetMutation = useMutation({
-    mutationFn: () =>
-      api.createInlineStreet({
-        name: streetName,
-        parent_area_id: parentId!,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['areas'] });
-      notify(`Street added to ${parent?.name}.`);
-      setShowStreetForm(false);
-      setStreetName('');
-    },
-    onError: (error) => notify(getApiErrorMessage(error, 'Street could not be created.'), 'error'),
-  });
+  const handleCreateStreet = () => {
+    submit('post', '/areas/streets', {
+      name: streetName,
+      parent_area_id: parentId,
+    }, {
+      onSuccess: () => {
+        setShowStreetForm(false);
+        setStreetName('');
+      },
+    });
+  };
 
-  const updateAreaMutation = useMutation({
-    mutationFn: () => api.updateArea(editingArea!.id, { name: editName }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['areas'] });
-      notify('Area name updated.');
-      setEditingArea(null);
-      setEditName('');
-    },
-    onError: (error) => notify(getApiErrorMessage(error, 'Area could not be updated.'), 'error'),
-  });
+  const handleUpdateArea = () => {
+    if (!editingArea) return;
+    submit('put', `/areas/${editingArea.id}`, { name: editName }, {
+      onSuccess: () => {
+        setEditingArea(null);
+        setEditName('');
+      },
+    });
+  };
 
   const drillDown = (area: Area) => {
     const idx = LEVELS.indexOf(area.level);
@@ -128,10 +126,10 @@ export default function AreasPage() {
           onClose={() => setShowStreetForm(false)}
           onSubmit={(e) => {
             e.preventDefault();
-            createStreetMutation.mutate();
+            handleCreateStreet();
           }}
           submitLabel="Save Street"
-          isSubmitting={createStreetMutation.isPending}
+          isSubmitting={processing}
         >
           <FormSection title="Location Details">
             <FormGrid cols={1}>
@@ -159,10 +157,10 @@ export default function AreasPage() {
           }}
           onSubmit={(e) => {
             e.preventDefault();
-            updateAreaMutation.mutate();
+            handleUpdateArea();
           }}
           submitLabel="Update Area"
-          isSubmitting={updateAreaMutation.isPending}
+          isSubmitting={processing}
         >
           <FormSection>
             <FormField label="Name" htmlFor="edit_area_name" required>
@@ -179,16 +177,7 @@ export default function AreasPage() {
 
       <Card className="border-0 shadow-sm ring-1 ring-border/60">
         <CardContent className="pt-6">
-          {isError ? (
-            <DataState
-              tone="error"
-              title={`${level}s could not be loaded`}
-              description="The selected branch of the area hierarchy is unavailable."
-              actionLabel="Try again"
-              onAction={() => refetch()}
-            />
-          ) : (
-            <Table>
+          <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -199,13 +188,7 @@ export default function AreasPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center">
-                    <Skeleton className="mx-auto h-4 w-24" />
-                  </TableCell>
-                </TableRow>
-              ) : data?.data.length === 0 ? (
+              {filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="p-0">
                     <DataState
@@ -217,11 +200,11 @@ export default function AreasPage() {
                     />
                   </TableCell>
                 </TableRow>
-              ) : data?.data.map((a) => (
+              ) : filtered.map((a) => (
                 <TableRow key={a.id}>
                   <TableCell className="font-medium">{a.name}</TableCell>
                   <TableCell className="capitalize text-muted-foreground">{a.level}</TableCell>
-                  <TableCell className="text-muted-foreground">{a.parent?.name ?? 'â€”'}</TableCell>
+                  <TableCell className="text-muted-foreground">{a.parent?.name ?? '-'}</TableCell>
                   <TableCell className="text-muted-foreground">{a.is_custom ? 'Yes' : 'No'}</TableCell>
                   <TableCell>
                     <RowActions
@@ -236,7 +219,7 @@ export default function AreasPage() {
                       extra={
                         a.level !== 'street' ? (
                           <Button variant="ghost" size="sm" onClick={() => drillDown(a)}>
-                            View â†’
+                            View →
                           </Button>
                         ) : undefined
                       }
@@ -245,8 +228,7 @@ export default function AreasPage() {
                 </TableRow>
               ))}
             </TableBody>
-            </Table>
-          )}
+          </Table>
         </CardContent>
       </Card>
     </div>

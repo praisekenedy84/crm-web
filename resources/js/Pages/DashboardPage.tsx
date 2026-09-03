@@ -2,8 +2,8 @@ import { Head, router, usePage } from '@inertiajs/react';
 import { ArrowRight, CircleDollarSign, Radio, Scale, Target } from 'lucide-react';
 import type {
   ConversionSource, FinancialSummary, LeaderboardEntry, PipelineSummary,
-} from '../lib/api';
-import type { SharedPageProps } from '@/types';
+  SharedPageProps,
+} from '@/types';
 import { WelcomeBanner } from '@/Components/WelcomeBanner';
 import { StatCard } from '@/Components/StatCard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/Components/ui/card';
