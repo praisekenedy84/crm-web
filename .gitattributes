@@ -1,0 +1,4 @@
+* text=auto eol=lf
+
+# Shell scripts run on the Linux deploy target and must keep LF endings.
+*.sh text eol=lf

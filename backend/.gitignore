@@ -16,6 +16,12 @@
 /public/build
 /public/hot
 /public/storage
+
+# Built SPA copied in from frontend/dist by deploy.sh
+/public/assets
+/public/index.html
+/public/manifest.json
+/public/vite.svg
 /storage/*.key
 /storage/pail
 /vendor

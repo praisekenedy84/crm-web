@@ -8,8 +8,9 @@ Multi-tenant Customer Relationship Management platform — all four phases imple
 |---|---|
 | Backend | Laravel 12, Sanctum, Queue jobs |
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS (PWA-ready) |
-| Database | SQLite (dev) / PostgreSQL (production) |
+| Database | PostgreSQL 14+ (local and production) |
 | Cache/Queue | Redis |
+| Hosting | Laravel Forge — native PHP-FPM/Nginx, no containers |
 
 ## Feature Coverage
 
@@ -50,34 +51,98 @@ Multi-tenant Customer Relationship Management platform — all four phases imple
 - Multi-pipeline selector in UI
 - Advanced analytics (velocity, revenue, audit trail)
 
-## Quick Start
+## Local Development Setup
+
+Local development mirrors production: everything runs natively on your machine, the same way
+it runs on the server. There is no Docker in this project — install the services directly
+(Homebrew or Laravel Herd/Valet on macOS, the distro packages on Linux, XAMPP/native
+installers or WSL on Windows).
+
+### Prerequisites
+
+| Tool | Version |
+|---|---|
+| PHP with `pdo_pgsql` | 8.2+ |
+| Composer | 2.x |
+| PostgreSQL | 14+ |
+| Redis | 6+ |
+| Node.js + npm | 20+ |
+
+### 1. Database
+
+Create a database and role that match what you will put in `.env`:
+
+```sql
+CREATE ROLE crm WITH LOGIN PASSWORD 'crm';
+CREATE DATABASE crm OWNER crm;
+```
+
+> **Port: 5432 vs 5433.** A stock local PostgreSQL install listens on **5432**, and locally
+> that is fine because nothing else competes for it. **Production uses 5433**, because the
+> shared VPS moved its PostgreSQL instance off the default port. The committed
+> `backend/.env.example` carries the production value `DB_PORT=5433`, so if your local
+> PostgreSQL is on the default port, change `DB_PORT` to `5432` in your own `.env`. Getting
+> these two mixed up is the most likely cause of a connection-refused error on either side.
+
+### 2. Backend
 
 ```bash
-# Backend
 cd backend
 composer install
-php artisan migrate:fresh --seed
-php artisan serve --host=127.0.0.1 --port=8000
+cp .env.example .env
+php artisan key:generate
+```
 
-# Frontend (separate terminal)
+Then edit `backend/.env` for local use — `.env.example` ships with production defaults:
+
+```
+APP_ENV=local
+APP_DEBUG=true
+APP_URL=http://localhost:8000
+DB_PORT=5432          # or 5433 if that is how your local PostgreSQL is configured
+DB_DATABASE=crm
+DB_USERNAME=crm
+DB_PASSWORD=crm
+```
+
+Run the migrations and seed the demo data:
+
+```bash
+php artisan migrate --seed
+php artisan serve --host=127.0.0.1 --port=8000
+```
+
+Laravel Herd or Valet works equally well instead of `artisan serve`; point it at
+`backend/public` and use the hostname it assigns.
+
+### 3. Frontend
+
+```bash
 cd frontend
 npm install
+cp .env.example .env
 npm run dev
 ```
 
-Open **http://localhost:5173**
+Open **http://localhost:5173**.
+
+`VITE_API_URL` in `frontend/.env` controls where API calls go. Leaving it empty is the
+recommended default: Vite's dev proxy forwards `/api` to `http://127.0.0.1:8000` (configured
+in `vite.config.ts`), which avoids CORS entirely. Set it to `http://localhost:8000` only if
+you want to bypass the proxy and hit the backend directly.
+
+### Demo credentials
 
 | Email | Password | Role |
 |---|---|---|
 | admin@demo.com | Password1 | Admin |
 | rep@demo.com | Password1 | Sales Rep |
 
-## Docker
+### Production
 
-```bash
-docker compose up -d postgres redis
-# Configure backend/.env for PostgreSQL, then migrate
-```
+The Vite dev server is a local-only tool. In production the frontend is built to a static
+`dist/` folder and served by Nginx. Deployment is documented separately in
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ## Key API Routes
 
@@ -107,4 +172,5 @@ GET    /api/v1/docs/openapi
 - `CRM_System_PRD.md` — Product requirements
 - `CRM_SRS.md` — Software requirements (FR-xxx IDs)
 - `CRM_TRD.md` — Technical architecture
+- `docs/DEPLOYMENT.md` — Production deployment on Laravel Forge
 - `docs/openapi.yaml` — API specification

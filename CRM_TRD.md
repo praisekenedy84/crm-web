@@ -79,7 +79,7 @@ Multi-tenant SaaS web application, following a **modular monolith** approach for
 | Search (optional, Phase 2+) | PostgreSQL full-text search initially; Elasticsearch/OpenSearch if scale requires | Avoid premature complexity |
 | Object Storage | S3-compatible (AWS S3, DigitalOcean Spaces, MinIO) | Attachments, exports |
 | Background Jobs | Laravel Queues / BullMQ (Node) | Email sync, automation, notifications |
-| Deployment | Docker containers; Laravel Forge or Kubernetes | Depends on team's ops maturity |
+| Deployment | Laravel Forge — native PHP-FPM/Nginx on a shared VPS, no containers | See `docs/DEPLOYMENT.md` |
 | CI/CD | GitHub Actions | Automated test, build, deploy pipeline |
 | Monitoring | Sentry (errors), Prometheus/Grafana or hosted APM (logs/metrics) | |
 | Email Integration | Gmail API, Microsoft Graph API | OAuth2 |
@@ -248,14 +248,14 @@ Standardized error envelope:
 ## 8. Infrastructure & Deployment
 
 ### 8.1 Environments
-- **Local** — Docker Compose for developer environments
+- **Local** — Natively installed PHP, PostgreSQL, Redis and Node, mirroring production (see `README.md`)
 - **Staging** — Mirrors production, used for QA/UAT
 - **Production** — Multi-AZ if using cloud provider; horizontally scaled app tier
 
 ### 8.2 Deployment Pipeline (CI/CD)
 1. Developer pushes to feature branch → PR opened
 2. CI runs: lint, unit tests, integration tests, security scan
-3. On merge to `main`: build Docker image, tag, push to registry
+3. On merge to `main`: Forge pulls the commit and runs `deploy.sh` (Composer install, migrations, config/route/view cache, frontend build)
 4. Auto-deploy to staging → run smoke tests
 5. Manual promotion (or scheduled) to production via blue-green or rolling deployment
 6. Post-deploy health checks; automatic rollback on failure threshold

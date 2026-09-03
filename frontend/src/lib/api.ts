@@ -1,4 +1,8 @@
-const API_BASE = '/api/v1';
+// Empty VITE_API_URL keeps requests same-origin: locally the Vite dev proxy forwards
+// them, and in production dist/ is served from the Laravel public directory. Set it
+// only when the API is deployed on a different origin than the frontend.
+const API_ORIGIN = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
+const API_BASE = `${API_ORIGIN}/api/v1`;
 
 class ApiError extends Error {
   constructor(
