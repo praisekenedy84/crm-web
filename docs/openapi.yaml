@@ -1,0 +1,222 @@
+openapi: 3.0.3
+info:
+  title: CRM API
+  version: 1.0.0
+  description: Multi-tenant CRM REST API
+servers:
+  - url: /api/v1
+paths:
+  /auth/login:
+    post:
+      summary: Login
+      tags: [Auth]
+  /contacts:
+    get:
+      summary: List contacts
+      tags: [Contacts]
+      security: [{ bearerAuth: [] }]
+    post:
+      summary: Create contact
+      tags: [Contacts]
+      security: [{ bearerAuth: [] }]
+  /leads:
+    get:
+      summary: List leads
+      tags: [Leads]
+      security: [{ bearerAuth: [] }]
+  /leads/{id}/convert:
+    post:
+      summary: Convert lead
+      tags: [Leads]
+      security: [{ bearerAuth: [] }]
+  /deals:
+    get:
+      summary: List deals
+      tags: [Deals]
+      security: [{ bearerAuth: [] }]
+  /deals/{id}/stage:
+    patch:
+      summary: Update deal stage
+      tags: [Deals]
+      security: [{ bearerAuth: [] }]
+  /automation-rules:
+    get:
+      summary: List automation rules
+      tags: [Automation]
+      security: [{ bearerAuth: [] }]
+  /webhooks:
+    get:
+      summary: List webhooks
+      tags: [Webhooks]
+      security: [{ bearerAuth: [] }]
+  /email/templates:
+    get:
+      summary: List email templates
+      tags: [Email]
+      security: [{ bearerAuth: [] }]
+  /custom-reports:
+    get:
+      summary: List custom reports
+      tags: [Reports]
+      security: [{ bearerAuth: [] }]
+  /forecast:
+    get:
+      summary: Sales forecast
+      tags: [Reports]
+      security: [{ bearerAuth: [] }]
+  /sync/delta:
+    get:
+      summary: Delta sync for mobile
+      tags: [Sync]
+      security: [{ bearerAuth: [] }]
+  /territories:
+    get:
+      summary: List territories
+      tags: [Territories]
+      security: [{ bearerAuth: [] }]
+  /import-export/areas:
+    post:
+      summary: Import geographic territories from CSV records
+      description: Creates or reuses the region, district, ward, and street hierarchy for each record.
+      tags: [Territories]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [records]
+              properties:
+                records:
+                  type: array
+                  maxItems: 1000
+                  items:
+                    type: object
+                    required: [region]
+                    properties:
+                      region: { type: string }
+                      district: { type: string, nullable: true }
+                      ward: { type: string, nullable: true }
+                      street: { type: string, nullable: true }
+      responses:
+        "200":
+          description: Import result
+  /import-export/areas/template/csv:
+    get:
+      summary: Download the geographic territory CSV template
+      tags: [Territories]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: CSV template
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+  /lead-score-rules:
+    get:
+      summary: Lead scoring rules
+      tags: [Lead Scoring]
+      security: [{ bearerAuth: [] }]
+  /analytics/overview:
+    get:
+      summary: Analytics overview
+      tags: [Analytics]
+      security: [{ bearerAuth: [] }]
+  /marketing/content-items:
+    get:
+      summary: List scheduled social content and submitted ideas
+      tags: [Marketing]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { name: include_unscheduled, in: query, schema: { type: boolean } }
+        - { name: status, in: query, schema: { type: string, enum: [idea, planned, in_progress, ready, published] } }
+        - { name: platform, in: query, schema: { type: string, enum: [instagram, facebook, linkedin, x, tiktok, youtube, other] } }
+      responses:
+        "200":
+          description: Paginated content items
+    post:
+      summary: Submit a social content idea
+      description: Available to every authenticated workspace user. New submissions always begin with idea status.
+      tags: [Marketing]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarketingContentSubmission"
+      responses:
+        "201":
+          description: Idea submitted
+  /marketing/content-items/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+    put:
+      summary: Schedule or update a social content item
+      description: Requires an admin or manager role.
+      tags: [Marketing]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarketingContentManagement"
+      responses:
+        "200":
+          description: Content item updated
+        "403":
+          description: Manager permission required
+    delete:
+      summary: Delete a social content item
+      description: Requires an admin or manager role.
+      tags: [Marketing]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Content item deleted
+  /marketing/contributors:
+    get:
+      summary: List active workspace users available for content assignment
+      description: Requires an admin or manager role.
+      tags: [Marketing]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Active workspace users
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+  schemas:
+    MarketingContentSubmission:
+      type: object
+      required: [title, content_type, platforms]
+      properties:
+        title: { type: string, maxLength: 255 }
+        brief: { type: string, nullable: true, maxLength: 5000 }
+        content_type: { type: string, enum: [post, carousel, reel, story, video] }
+        platforms:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, enum: [instagram, facebook, linkedin, x, tiktok, youtube, other] }
+        proposed_date: { type: string, format: date, nullable: true }
+    MarketingContentManagement:
+      allOf:
+        - $ref: "#/components/schemas/MarketingContentSubmission"
+        - type: object
+          properties:
+            scheduled_at: { type: string, format: date-time, nullable: true }
+            status: { type: string, enum: [idea, planned, in_progress, ready, published] }
+            assigned_to: { type: integer, nullable: true }
