@@ -16,9 +16,23 @@ return new class extends Migration
         $pivotPermission = $columnNames['permission_pivot_key'] ?? 'permission_id';
         $morphKey = $columnNames['model_morph_key'] ?? 'model_id';
 
+        // Fresh installs with permission.teams=true already create team columns in
+        // create_permission_tables. If that migration was marked ran without tables
+        // (or schema was wiped), rebuild the base Spatie tables first.
+        if (! Schema::hasTable($tableNames['roles'])
+            || ! Schema::hasTable($tableNames['permissions'])
+            || ! Schema::hasTable($tableNames['model_has_roles'])
+            || ! Schema::hasTable($tableNames['model_has_permissions'])
+            || ! Schema::hasTable($tableNames['role_has_permissions'])) {
+            $this->createPermissionTablesWithTeams($tableNames, $teamKey, $pivotRole, $pivotPermission, $morphKey);
+            $this->migrateRoleRowsToTenants($teamKey, $pivotRole, $morphKey);
+
+            return;
+        }
+
         if (! Schema::hasColumn($tableNames['roles'], $teamKey)) {
             Schema::table($tableNames['roles'], function (Blueprint $table) use ($teamKey) {
-                $table->unsignedBigInteger($teamKey)->nullable()->after('id');
+                $table->unsignedBigInteger($teamKey)->nullable();
                 $table->index($teamKey, 'roles_team_foreign_key_index');
             });
         }
@@ -65,6 +79,93 @@ return new class extends Migration
     public function down(): void
     {
         // Data reshape is not safely reversible.
+    }
+
+    /**
+     * @param  array<string, string>  $tableNames
+     */
+    private function createPermissionTablesWithTeams(
+        array $tableNames,
+        string $teamKey,
+        string $pivotRole,
+        string $pivotPermission,
+        string $morphKey,
+    ): void {
+        foreach ([
+            $tableNames['role_has_permissions'],
+            $tableNames['model_has_roles'],
+            $tableNames['model_has_permissions'],
+            $tableNames['roles'],
+            $tableNames['permissions'],
+        ] as $table) {
+            Schema::dropIfExists($table);
+        }
+
+        Schema::create($tableNames['permissions'], static function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->string('name');
+            $table->string('guard_name');
+            $table->timestamps();
+            $table->unique(['name', 'guard_name']);
+        });
+
+        Schema::create($tableNames['roles'], static function (Blueprint $table) use ($teamKey) {
+            $table->bigIncrements('id');
+            $table->unsignedBigInteger($teamKey)->nullable();
+            $table->index($teamKey, 'roles_team_foreign_key_index');
+            $table->string('name');
+            $table->string('guard_name');
+            $table->timestamps();
+            $table->unique([$teamKey, 'name', 'guard_name']);
+        });
+
+        Schema::create($tableNames['model_has_permissions'], static function (Blueprint $table) use ($tableNames, $pivotPermission, $teamKey, $morphKey) {
+            $table->unsignedBigInteger($pivotPermission);
+            $table->string('model_type');
+            $table->unsignedBigInteger($morphKey);
+            $table->index([$morphKey, 'model_type'], 'model_has_permissions_model_id_model_type_index');
+            $table->foreign($pivotPermission)
+                ->references('id')
+                ->on($tableNames['permissions'])
+                ->onDelete('cascade');
+            $table->unsignedBigInteger($teamKey);
+            $table->index($teamKey, 'model_has_permissions_team_foreign_key_index');
+            $table->primary(
+                [$teamKey, $pivotPermission, $morphKey, 'model_type'],
+                'model_has_permissions_permission_model_type_primary'
+            );
+        });
+
+        Schema::create($tableNames['model_has_roles'], static function (Blueprint $table) use ($tableNames, $pivotRole, $teamKey, $morphKey) {
+            $table->unsignedBigInteger($pivotRole);
+            $table->string('model_type');
+            $table->unsignedBigInteger($morphKey);
+            $table->index([$morphKey, 'model_type'], 'model_has_roles_model_id_model_type_index');
+            $table->foreign($pivotRole)
+                ->references('id')
+                ->on($tableNames['roles'])
+                ->onDelete('cascade');
+            $table->unsignedBigInteger($teamKey);
+            $table->index($teamKey, 'model_has_roles_team_foreign_key_index');
+            $table->primary(
+                [$teamKey, $pivotRole, $morphKey, 'model_type'],
+                'model_has_roles_role_model_type_primary'
+            );
+        });
+
+        Schema::create($tableNames['role_has_permissions'], static function (Blueprint $table) use ($tableNames, $pivotRole, $pivotPermission) {
+            $table->unsignedBigInteger($pivotPermission);
+            $table->unsignedBigInteger($pivotRole);
+            $table->foreign($pivotPermission)
+                ->references('id')
+                ->on($tableNames['permissions'])
+                ->onDelete('cascade');
+            $table->foreign($pivotRole)
+                ->references('id')
+                ->on($tableNames['roles'])
+                ->onDelete('cascade');
+            $table->primary([$pivotPermission, $pivotRole], 'role_has_permissions_permission_id_role_id_primary');
+        });
     }
 
     private function migrateRoleRowsToTenants(string $teamKey, string $pivotRole, string $morphKey): void
