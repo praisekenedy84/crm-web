@@ -93,7 +93,7 @@ export default function AreasPage({ areas }: AreasPageProps) {
             setPath([]);
             setShowStreetForm(false);
           }}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 font-medium text-primary hover:bg-primary/10"
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 py-2 font-medium text-primary hover:bg-primary/10"
         >
           <MapPin className="size-4" />
           Regions
@@ -107,7 +107,7 @@ export default function AreasPage({ areas }: AreasPageProps) {
                 setPath(path.slice(0, index + 1));
                 setShowStreetForm(false);
               }}
-              className="rounded-lg px-2 py-1 font-medium hover:bg-muted"
+              className="min-h-9 max-w-[60vw] truncate rounded-lg px-3 py-2 font-medium hover:bg-muted"
             >
               {area.name}
             </button>
@@ -177,7 +177,7 @@ export default function AreasPage({ areas }: AreasPageProps) {
 
       <Card className="border-0 shadow-sm ring-1 ring-border/60">
         <CardContent className="pt-6">
-          <Table>
+          <Table stacked>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -202,11 +202,11 @@ export default function AreasPage({ areas }: AreasPageProps) {
                 </TableRow>
               ) : filtered.map((a) => (
                 <TableRow key={a.id}>
-                  <TableCell className="font-medium">{a.name}</TableCell>
-                  <TableCell className="capitalize text-muted-foreground">{a.level}</TableCell>
-                  <TableCell className="text-muted-foreground">{a.parent?.name ?? '-'}</TableCell>
-                  <TableCell className="text-muted-foreground">{a.is_custom ? 'Yes' : 'No'}</TableCell>
-                  <TableCell>
+                  <TableCell className="font-medium max-md:text-base">{a.name}</TableCell>
+                  <TableCell label="Level" className="capitalize text-muted-foreground">{a.level}</TableCell>
+                  <TableCell label="Parent" className="text-muted-foreground">{a.parent?.name ?? '-'}</TableCell>
+                  <TableCell label="Custom" className="text-muted-foreground">{a.is_custom ? 'Yes' : 'No'}</TableCell>
+                  <TableCell className="max-md:pt-2">
                     <RowActions
                       onEdit={
                         a.is_custom

@@ -244,15 +244,15 @@ export default function AdminUsersPage({ users, permissionGroups }: AdminUsersPa
                       {perms.map((permission) => (
                         <label
                           key={permission}
-                          className="flex items-center gap-2 text-xs font-mono"
+                          className="flex min-h-9 items-center gap-2 py-1 font-mono text-xs"
                         >
                           <input
                             type="checkbox"
-                            className="size-4 accent-primary"
+                            className="size-5 shrink-0 accent-primary md:size-4"
                             checked={form.direct_permissions.includes(permission)}
                             onChange={() => toggleDirect(permission)}
                           />
-                          {permission}
+                          <span className="min-w-0 break-all">{permission}</span>
                         </label>
                       ))}
                     </div>
@@ -266,7 +266,7 @@ export default function AdminUsersPage({ users, permissionGroups }: AdminUsersPa
 
       <Card className="border-0 shadow-sm ring-1 ring-border/60">
         <CardContent className="pt-6">
-          <Table>
+          <Table stacked>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -281,18 +281,18 @@ export default function AdminUsersPage({ users, permissionGroups }: AdminUsersPa
             <TableBody>
               {users.map((u) => (
                 <TableRow key={u.id}>
-                  <TableCell className="font-medium">{u.name}</TableCell>
-                  <TableCell>{u.email}</TableCell>
-                  <TableCell className="capitalize">{u.role}</TableCell>
-                  <TableCell className="capitalize">{u.status ?? 'active'}</TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell className="font-medium max-md:text-base">{u.name}</TableCell>
+                  <TableCell label="Email" className="max-md:break-all">{u.email}</TableCell>
+                  <TableCell label="Role" className="capitalize">{u.role}</TableCell>
+                  <TableCell label="Status" className="capitalize">{u.status ?? 'active'}</TableCell>
+                  <TableCell label="Overrides" className="text-muted-foreground">
                     {u.direct_permissions?.length ? u.direct_permissions.length : '-'}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell label="Last Login" className="text-muted-foreground">
                     {u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : '-'}
                   </TableCell>
                   {canManage && (
-                    <TableCell>
+                    <TableCell className="max-md:pt-2">
                       <RowActions
                         onEdit={() => openEdit(u)}
                         onDelete={() => setDeleteTarget(u)}

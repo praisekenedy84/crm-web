@@ -9,6 +9,7 @@ export interface SharedUser {
   name: string
   email: string
   role: string
+  is_platform_admin?: boolean
   tenant: {
     id: number
     name: string
@@ -23,6 +24,11 @@ export interface SharedPageProps extends PageProps {
     user: SharedUser | null
     permissions: string[]
     scopes: Record<string, 'own' | 'team' | 'all'>
+    impersonation?: {
+      active: boolean
+      impersonator?: { id: number; name: string; email: string }
+      target?: { id: number; name: string; email: string; tenant: string | null }
+    }
   }
   flash: {
     success: string | null

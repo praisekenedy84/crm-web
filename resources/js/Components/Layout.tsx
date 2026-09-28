@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Building2, UserPlus, Kanban, CheckSquare,
   LogOut, Settings, BarChart3, TrendingUp, Upload, Shield, KeyRound,
   DollarSign, Package, Briefcase, FolderKanban, FileText, Receipt, MapPin,
-  Menu, X, ChevronsUpDown, CalendarDays, ScrollText,
+  Menu, X, ChevronsUpDown, CalendarDays, ScrollText, Eye,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Avatar, AvatarFallback } from '@/Components/ui/avatar';
@@ -25,14 +25,14 @@ type NavDef = {
 
 const crmNavItems: NavDef[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/contacts', label: 'Contacts', icon: Users, resource: 'contacts' },
-  { to: '/accounts', label: 'Accounts', icon: Building2, resource: 'accounts' },
-  { to: '/leads', label: 'Leads', icon: UserPlus, resource: 'leads' },
-  { to: '/deals', label: 'Pipeline', icon: Kanban, resource: 'deals' },
-  { to: '/tasks', label: 'Tasks', icon: CheckSquare, resource: 'tasks' },
-  { to: '/reports', label: 'Reports', icon: TrendingUp, permission: 'reports.view' },
-  { to: '/analytics', label: 'Analytics', icon: BarChart3, permission: 'analytics.view' },
-  { to: '/import', label: 'Import', icon: Upload, permission: 'import.run' },
+  { to: '/contacts', label: 'Contacts', icon: Users, module: 'crm', resource: 'contacts' },
+  { to: '/accounts', label: 'Accounts', icon: Building2, module: 'crm', resource: 'accounts' },
+  { to: '/leads', label: 'Leads', icon: UserPlus, module: 'crm', resource: 'leads' },
+  { to: '/deals', label: 'Pipeline', icon: Kanban, module: 'crm', resource: 'deals' },
+  { to: '/tasks', label: 'Tasks', icon: CheckSquare, module: 'crm', resource: 'tasks' },
+  { to: '/reports', label: 'Reports', icon: TrendingUp, module: 'crm', permission: 'reports.view' },
+  { to: '/analytics', label: 'Analytics', icon: BarChart3, module: 'crm', permission: 'analytics.view' },
+  { to: '/import', label: 'Import', icon: Upload, module: 'crm', permission: 'import.run' },
 ];
 
 const erpNavItems: NavDef[] = [
@@ -46,7 +46,12 @@ const erpNavItems: NavDef[] = [
 ];
 
 const marketingNavItems: NavDef[] = [
-  { to: '/marketing', label: 'Content Calendar', icon: CalendarDays, permission: 'marketing.view' },
+  { to: '/marketing', label: 'Content Calendar', icon: CalendarDays, module: 'crm', permission: 'marketing.view' },
+];
+
+const platformNavItems: NavDef[] = [
+  { to: '/platform/god-eye', label: 'God Eye', icon: Eye },
+  { to: '/platform/tenants', label: 'Tenants', icon: Building2 },
 ];
 
 function isActivePath(currentUrl: string, to: string) {
@@ -116,6 +121,7 @@ function SidebarContent({
   marketingItems,
   erpItems,
   adminItems,
+  platformItems,
   showSettings,
   onNavigate,
   onClose,
@@ -128,11 +134,14 @@ function SidebarContent({
   marketingItems: NavDef[];
   erpItems: NavDef[];
   adminItems: NavDef[];
+  platformItems: NavDef[];
   showSettings: boolean;
   onNavigate?: () => void;
   onClose?: () => void;
   showCloseButton?: boolean;
 }) {
+  const isPlatform = Boolean(user?.is_platform_admin);
+
   return (
     <>
       <div className="flex items-center justify-between px-5 py-5">
@@ -140,7 +149,9 @@ function SidebarContent({
           <BrandLogo size={36} className="size-9 shrink-0 rounded-xl object-cover shadow-lg shadow-black/20" />
           <div>
             <h1 className="font-heading text-base font-semibold tracking-tight text-white">Northstar</h1>
-            <p className="text-[10px] tracking-[0.12em] text-sidebar-foreground/45 uppercase">Revenue desk</p>
+            <p className="text-[10px] tracking-[0.12em] text-sidebar-foreground/45 uppercase">
+              {isPlatform ? 'Platform admin' : 'Revenue desk'}
+            </p>
           </div>
         </div>
         {showCloseButton && onClose && (
@@ -163,21 +174,29 @@ function SidebarContent({
           </Avatar>
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-white">{user?.name}</p>
-            <p className="truncate text-xs text-sidebar-foreground/55">{user?.tenant?.name}</p>
+            <p className="truncate text-xs text-sidebar-foreground/55">
+              {isPlatform ? 'All tenants' : user?.tenant?.name}
+            </p>
           </div>
           <ChevronsUpDown className="ml-auto size-3.5 text-sidebar-foreground/35" />
         </div>
       </div>
 
       <nav className="mt-4 flex-1 space-y-5 overflow-y-auto px-3 py-2" aria-label="Main navigation">
-        <NavSection title="CRM" items={crmItems} onNavigate={onNavigate} />
-        <NavSection title="Marketing" items={marketingItems} onNavigate={onNavigate} />
-        <NavSection title="Operations" items={erpItems} onNavigate={onNavigate} />
-        <NavSection title="Admin" items={adminItems} onNavigate={onNavigate} />
+        {isPlatform ? (
+          <NavSection title="Platform" items={platformItems} onNavigate={onNavigate} />
+        ) : (
+          <>
+            <NavSection title="CRM" items={crmItems} onNavigate={onNavigate} />
+            <NavSection title="Marketing" items={marketingItems} onNavigate={onNavigate} />
+            <NavSection title="Operations" items={erpItems} onNavigate={onNavigate} />
+            <NavSection title="Admin" items={adminItems} onNavigate={onNavigate} />
+          </>
+        )}
       </nav>
 
       <div className="border-t border-sidebar-border p-3">
-        {showSettings && (
+        {!isPlatform && showSettings && (
           <NavItem to="/settings" label="Settings" icon={Settings} onNavigate={onNavigate} />
         )}
         <Button
@@ -196,6 +215,7 @@ function SidebarContent({
 export default function Layout({ children }: { children: ReactNode }) {
   const page = usePage<SharedPageProps>();
   const user = page.props.auth?.user ?? null;
+  const impersonation = page.props.auth?.impersonation;
   const url = page.url;
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { can, canView } = useCan();
@@ -209,7 +229,10 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   const closeSidebar = () => setSidebarOpen(false);
   const logout = () => router.post('/logout');
+  const leaveImpersonation = () => router.post('/platform/impersonation/leave');
   const enabledModules = user?.tenant?.enabled_modules;
+  const isPlatformAdmin = Boolean(user?.is_platform_admin);
+  const isImpersonating = Boolean(impersonation?.active);
 
   const allowed = (item: NavDef) => {
     if (item.module && enabledModules && !enabledModules.includes(item.module)) {
@@ -224,10 +247,20 @@ export default function Layout({ children }: { children: ReactNode }) {
     return true;
   };
 
-  const visibleCrm = useMemo(() => crmNavItems.filter(allowed), [can, canView, enabledModules]);
-  const visibleMarketing = useMemo(() => marketingNavItems.filter(allowed), [can, enabledModules]);
-  const visibleErp = useMemo(() => erpNavItems.filter(allowed), [can, enabledModules]);
+  const visibleCrm = useMemo(
+    () => (isPlatformAdmin ? [] : crmNavItems.filter(allowed)),
+    [can, canView, enabledModules, isPlatformAdmin],
+  );
+  const visibleMarketing = useMemo(
+    () => (isPlatformAdmin ? [] : marketingNavItems.filter(allowed)),
+    [can, enabledModules, isPlatformAdmin],
+  );
+  const visibleErp = useMemo(
+    () => (isPlatformAdmin ? [] : erpNavItems.filter(allowed)),
+    [can, enabledModules, isPlatformAdmin],
+  );
   const adminItems = useMemo(() => {
+    if (isPlatformAdmin) return [];
     const items: NavDef[] = [];
     if (can('users.view')) {
       items.push({ to: '/admin/users', label: 'Users', icon: Shield });
@@ -239,11 +272,15 @@ export default function Layout({ children }: { children: ReactNode }) {
       items.push({ to: '/audit-logs', label: 'Audit logs', icon: ScrollText });
     }
     return items;
-  }, [can]);
+  }, [can, isPlatformAdmin]);
+  const visiblePlatform = useMemo(
+    () => (isPlatformAdmin ? platformNavItems : []),
+    [isPlatformAdmin],
+  );
 
-  const allNavItems = [...visibleCrm, ...visibleMarketing, ...visibleErp, ...adminItems];
+  const allNavItems = [...visibleCrm, ...visibleMarketing, ...visibleErp, ...adminItems, ...visiblePlatform];
   const currentPage = allNavItems.find((item) => isActivePath(url, item.to))?.label
-    ?? (isActivePath(url, '/settings') ? 'Settings' : 'Workspace');
+    ?? (isActivePath(url, '/settings') ? 'Settings' : (isPlatformAdmin ? 'Platform' : 'Workspace'));
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -278,7 +315,7 @@ export default function Layout({ children }: { children: ReactNode }) {
 
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform duration-300 ease-in-out lg:static lg:z-auto lg:shrink-0 lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 flex w-[min(272px,100vw)] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform duration-300 ease-in-out lg:static lg:z-auto lg:w-[272px] lg:shrink-0 lg:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
@@ -290,6 +327,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           marketingItems={visibleMarketing}
           erpItems={visibleErp}
           adminItems={adminItems}
+          platformItems={visiblePlatform}
           showSettings={can('settings.view')}
           onNavigate={closeSidebar}
           onClose={closeSidebar}
@@ -298,7 +336,24 @@ export default function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border/70 bg-background/90 px-4 py-3 backdrop-blur-xl lg:hidden">
+        {isImpersonating && (
+          <div className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/30 bg-amber-500/15 px-4 py-2 text-sm text-amber-950 dark:text-amber-100">
+            <p>
+              <span className="font-semibold">God Eye</span>
+              {' — viewing as '}
+              <span className="font-medium">{impersonation?.target?.name}</span>
+              {impersonation?.target?.tenant ? ` · ${impersonation.target.tenant}` : ''}
+              {impersonation?.impersonator?.name
+                ? ` (platform: ${impersonation.impersonator.name})`
+                : ''}
+            </p>
+            <Button size="sm" variant="outline" onClick={leaveImpersonation}>
+              Exit to platform
+            </Button>
+          </div>
+        )}
+
+        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border/70 bg-background/90 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-xl lg:hidden">
           <Button
             variant="ghost"
             size="icon-sm"
@@ -316,11 +371,13 @@ export default function Layout({ children }: { children: ReactNode }) {
         <header className="hidden h-16 items-center justify-between border-b border-border/70 bg-card/75 px-8 backdrop-blur-xl lg:flex">
           <div>
             <p className="font-heading text-sm font-semibold text-foreground">{currentPage}</p>
-            <p className="text-xs text-muted-foreground">{user?.tenant?.name ?? 'Your workspace'}</p>
+            <p className="text-xs text-muted-foreground">
+              {user?.is_platform_admin ? 'Platform console' : (user?.tenant?.name ?? 'Your workspace')}
+            </p>
           </div>
           <div className="flex items-center gap-2 rounded-full border border-border/80 bg-background px-3 py-1.5 text-xs text-muted-foreground">
             <span className="size-2 rounded-full bg-success shadow-[0_0_0_3px_color-mix(in_oklch,var(--success)_15%,transparent)]" />
-            Workspace live
+            {user?.is_platform_admin ? 'Platform live' : (isImpersonating ? 'Impersonating' : 'Workspace live')}
           </div>
         </header>
 

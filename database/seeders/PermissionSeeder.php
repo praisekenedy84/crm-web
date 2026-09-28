@@ -2,10 +2,13 @@
 
 namespace Database\Seeders;
 
+use App\Models\Tenant;
+use App\Models\User;
+use App\Services\TenantProvisioningService;
 use App\Support\PermissionCatalog;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
 class PermissionSeeder extends Seeder
@@ -18,13 +21,21 @@ class PermissionSeeder extends Seeder
             Permission::findOrCreate($name, 'web');
         }
 
-        foreach (array_keys(PermissionCatalog::roleDefaults()) as $roleName) {
-            Role::findOrCreate($roleName, 'web');
-        }
+        $provisioning = app(TenantProvisioningService::class);
 
-        foreach (PermissionCatalog::roleDefaults() as $roleName => $permissions) {
-            $role = Role::findByName($roleName, 'web');
-            $role->syncPermissions($permissions);
-        }
+        Tenant::query()->each(function (Tenant $tenant) use ($provisioning) {
+            $provisioning->provisionRoles($tenant->id);
+        });
+
+        User::query()->firstOrCreate(
+            ['email' => 'platform@northstar.com', 'tenant_id' => null],
+            [
+                'name' => 'Platform Admin',
+                'password' => Hash::make('Password1'),
+                'role' => 'admin',
+                'status' => 'active',
+                'is_platform_admin' => true,
+            ],
+        );
     }
 }

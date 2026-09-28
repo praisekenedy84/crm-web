@@ -3,6 +3,8 @@
 use App\Http\Middleware\AuthenticateApiKey;
 use App\Http\Middleware\CheckRole;
 use App\Http\Middleware\EnsureModuleEnabled;
+use App\Http\Middleware\EnsurePlatformAdmin;
+use App\Http\Middleware\EnsureTenantUser;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SetTenantContext;
 use Illuminate\Foundation\Application;
@@ -19,6 +21,8 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'tenant' => SetTenantContext::class,
+            'tenant.user' => EnsureTenantUser::class,
+            'platform' => EnsurePlatformAdmin::class,
             'role' => CheckRole::class,
             'auth.api' => AuthenticateApiKey::class,
             'module' => EnsureModuleEnabled::class,

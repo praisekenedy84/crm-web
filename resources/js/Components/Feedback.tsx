@@ -50,7 +50,7 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
     <FeedbackContext.Provider value={{ notify }}>
       {children}
       <div
-        className="pointer-events-none fixed inset-x-4 bottom-4 z-[100] flex justify-center sm:inset-x-auto sm:right-6"
+        className="pointer-events-none fixed inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[100] flex justify-center sm:inset-x-auto sm:right-6"
         aria-live="polite"
         aria-atomic="true"
       >

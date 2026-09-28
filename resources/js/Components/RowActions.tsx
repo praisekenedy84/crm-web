@@ -1,4 +1,5 @@
 import { Pencil, Trash2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/Components/ui/button';
 import { TableHead } from '@/Components/ui/table';
 
@@ -14,7 +15,7 @@ interface RowActionsProps {
 
 export function ActionsTableHead({ className }: { className?: string }) {
   return (
-    <TableHead className={className ?? 'w-[88px] text-right'}>
+    <TableHead className={cn('w-[88px] text-right', className)}>
       Actions
     </TableHead>
   );
@@ -30,7 +31,7 @@ export function RowActions({
   extra,
 }: RowActionsProps) {
   return (
-    <div className="flex items-center justify-end gap-0.5">
+    <div className="flex flex-wrap items-center justify-end gap-1 md:gap-0.5">
       {extra}
       {onEdit && (
         <Button

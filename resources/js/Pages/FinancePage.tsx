@@ -24,19 +24,19 @@ export default function FinancePage({ summary, invoices }: FinancePageProps) {
         <Card>
           <CardHeader>
             <CardDescription>Revenue</CardDescription>
-            <CardTitle className="text-2xl">{fmt(summary.revenue)}</CardTitle>
+            <CardTitle className="text-xl tabular-nums sm:text-2xl">{fmt(summary.revenue)}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader>
             <CardDescription>Expenses</CardDescription>
-            <CardTitle className="text-2xl">{fmt(summary.expenses)}</CardTitle>
+            <CardTitle className="text-xl tabular-nums sm:text-2xl">{fmt(summary.expenses)}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader>
             <CardDescription>Net Income</CardDescription>
-            <CardTitle className="text-2xl">{fmt(summary.net_income)}</CardTitle>
+            <CardTitle className="text-xl tabular-nums sm:text-2xl">{fmt(summary.net_income)}</CardTitle>
           </CardHeader>
         </Card>
       </div>
@@ -46,7 +46,7 @@ export default function FinancePage({ summary, invoices }: FinancePageProps) {
           <CardTitle>Invoices</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table stacked>
             <TableHeader>
               <TableRow>
                 <TableHead>Number</TableHead>
@@ -60,12 +60,12 @@ export default function FinancePage({ summary, invoices }: FinancePageProps) {
             <TableBody>
               {invoices.data.map((inv) => (
                 <TableRow key={inv.id}>
-                  <TableCell className="font-medium">{inv.invoice_number}</TableCell>
-                  <TableCell className="text-muted-foreground">{inv.party?.name ?? `#${inv.customer_party_id}`}</TableCell>
-                  <TableCell className="text-muted-foreground">{inv.issue_date}</TableCell>
-                  <TableCell>{fmt(inv.total_amount)}</TableCell>
-                  <TableCell>{fmt(inv.amount_paid)}</TableCell>
-                  <TableCell className="capitalize text-muted-foreground">{inv.status}</TableCell>
+                  <TableCell className="font-medium max-md:text-base max-md:break-all">{inv.invoice_number}</TableCell>
+                  <TableCell label="Customer" className="text-muted-foreground">{inv.party?.name ?? `#${inv.customer_party_id}`}</TableCell>
+                  <TableCell label="Issue Date" className="text-muted-foreground">{inv.issue_date}</TableCell>
+                  <TableCell label="Total" className="tabular-nums">{fmt(inv.total_amount)}</TableCell>
+                  <TableCell label="Paid" className="tabular-nums">{fmt(inv.amount_paid)}</TableCell>
+                  <TableCell label="Status" className="capitalize text-muted-foreground">{inv.status}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

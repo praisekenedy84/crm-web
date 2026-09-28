@@ -19,6 +19,7 @@ class User extends Authenticatable
 
     protected $fillable = [
         'tenant_id',
+        'is_platform_admin',
         'name',
         'email',
         'password',
@@ -40,6 +41,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'role' => UserRole::class,
+            'is_platform_admin' => 'boolean',
             'last_login_at' => 'datetime',
             'locked_until' => 'datetime',
         ];
@@ -60,12 +62,21 @@ class User extends Authenticatable
         return $this->locked_until && $this->locked_until->isFuture();
     }
 
+    public function isPlatformAdmin(): bool
+    {
+        return (bool) $this->is_platform_admin;
+    }
+
     /**
      * Assign the primary Spatie role and keep users.role in sync.
      */
     public function syncPrimaryRole(string|UserRole $role): self
     {
         $roleName = $role instanceof UserRole ? $role->value : $role;
+
+        if ($this->tenant_id) {
+            setPermissionsTeamId($this->tenant_id);
+        }
 
         $this->syncRoles([$roleName]);
         $this->forceFill(['role' => $roleName])->save();

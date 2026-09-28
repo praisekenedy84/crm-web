@@ -51,7 +51,7 @@ export default function SettingsPage({
               ) : (
                 <ul className="space-y-2">
                   {items.map((item, i) => (
-                    <li key={i} className="rounded-lg bg-muted px-3 py-2 text-sm">{item}</li>
+                    <li key={i} title={item} className="rounded-lg bg-muted px-3 py-2 text-sm break-words">{item}</li>
                   ))}
                 </ul>
               )}

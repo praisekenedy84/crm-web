@@ -23,6 +23,9 @@ export default function RolesPage({ roles, permissionGroups }: RolesPageProps) {
   const [draft, setDraft] = useState<Record<number, string[]>>(() =>
     Object.fromEntries(roles.map((r) => [r.id, [...r.permissions]])),
   );
+  // The matrix needs one column per role, which cannot fit on a phone, so small
+  // screens edit a single role at a time instead.
+  const [activeRoleId, setActiveRoleId] = useState<number | null>(roles[0]?.id ?? null);
 
   const flatPermissions = useMemo(
     () => Object.values(permissionGroups).flat(),
@@ -57,6 +60,8 @@ export default function RolesPage({ roles, permissionGroups }: RolesPageProps) {
     return false;
   };
 
+  const activeRole = roles.find((r) => r.id === activeRoleId) ?? null;
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -68,8 +73,70 @@ export default function RolesPage({ roles, permissionGroups }: RolesPageProps) {
         <CardHeader>
           <CardTitle className="text-base">Permission matrix</CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
+        <CardContent className="md:overflow-x-auto">
+          <div className="md:hidden">
+            <p className="text-xs font-medium text-muted-foreground">Editing role</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {roles.map((role) => (
+                <Button
+                  key={role.id}
+                  size="sm"
+                  variant={role.id === activeRoleId ? 'default' : 'outline'}
+                  onClick={() => setActiveRoleId(role.id)}
+                  aria-pressed={role.id === activeRoleId}
+                  className="capitalize"
+                >
+                  {role.name}
+                  {isDirty(role) && (
+                    <span className="ml-1 size-1.5 rounded-full bg-current" aria-label="unsaved changes" />
+                  )}
+                </Button>
+              ))}
+            </div>
+
+            {activeRole && (
+              <div className="mt-5 space-y-5">
+                {Object.entries(permissionGroups).map(([group, perms]) => (
+                  <div key={group}>
+                    <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                      {group}
+                    </p>
+                    <div className="mt-2 divide-y divide-border/70 overflow-hidden rounded-xl ring-1 ring-border/70">
+                      {perms.map((permission) => (
+                        <label
+                          key={permission}
+                          className="flex min-h-11 items-center justify-between gap-3 px-3 py-2"
+                        >
+                          <span className="min-w-0 font-mono text-xs break-all">{permission}</span>
+                          <input
+                            type="checkbox"
+                            className="size-5 shrink-0 accent-primary"
+                            checked={(draft[activeRole.id] ?? []).includes(permission)}
+                            onChange={() => toggle(activeRole.id, permission)}
+                            aria-label={`${activeRole.name} ${permission}`}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                <Button
+                  size="lg"
+                  disabled={processing || !isDirty(activeRole)}
+                  onClick={() => saveRole(activeRole)}
+                  className="w-full capitalize"
+                >
+                  Save {activeRole.name}
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  {flatPermissions.length} permissions across {roles.length} roles
+                </p>
+              </div>
+            )}
+          </div>
+
+          <Table className="max-md:hidden">
             <TableHeader>
               <TableRow>
                 <TableHead className="sticky left-0 z-10 min-w-[220px] bg-card">Permission</TableHead>
@@ -114,7 +181,7 @@ export default function RolesPage({ roles, permissionGroups }: RolesPageProps) {
             </TableBody>
           </Table>
 
-          <div className="mt-6 flex flex-wrap gap-2">
+          <div className="mt-6 flex flex-wrap gap-2 max-md:hidden">
             {roles.map((role) => (
               <Button
                 key={role.id}

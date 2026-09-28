@@ -22,7 +22,7 @@ export function DataPagination({
   const last = Math.min(page * pageSize, total);
 
   return (
-    <div className="flex flex-col gap-3 border-t border-border/70 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 border-t border-border/70 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
       <p className="text-xs text-muted-foreground">
         Showing <span className="font-semibold text-foreground">{first}-{last}</span> of{' '}
         <span className="font-semibold text-foreground">{total}</span>
@@ -33,11 +33,12 @@ export function DataPagination({
           size="sm"
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
+          className="flex-1 sm:flex-none"
         >
           <ChevronLeft className="size-3.5" />
           Previous
         </Button>
-        <span className="min-w-20 text-center text-xs font-medium text-muted-foreground">
+        <span className="min-w-20 shrink-0 text-center text-xs font-medium text-muted-foreground">
           Page {page} of {Math.max(lastPage, 1)}
         </span>
         <Button
@@ -45,6 +46,7 @@ export function DataPagination({
           size="sm"
           disabled={page >= lastPage}
           onClick={() => onPageChange(page + 1)}
+          className="flex-1 sm:flex-none"
         >
           Next
           <ChevronRight className="size-3.5" />

@@ -486,13 +486,13 @@ export default function DealsPage({
           return (
             <div
               key={stage.id}
-              className="flex w-[86vw] shrink-0 snap-start flex-col rounded-2xl border border-border/70 bg-muted/45 p-3 sm:w-[360px] lg:min-w-[230px] lg:flex-1"
+              className="flex w-[min(86vw,340px)] shrink-0 snap-start flex-col rounded-2xl border border-border/70 bg-muted/45 p-3 sm:w-[360px] lg:min-w-[230px] lg:flex-1"
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => handleDrop(stage.id)}
             >
-              <div className="mb-3 flex items-center justify-between px-1">
-                <h3 className="text-sm font-semibold">{stage.name}</h3>
-                <Badge variant="secondary">{deals.length}</Badge>
+              <div className="mb-3 flex items-center justify-between gap-2 px-1">
+                <h3 className="min-w-0 truncate text-sm font-semibold">{stage.name}</h3>
+                <Badge variant="secondary" className="shrink-0">{deals.length}</Badge>
               </div>
 
               <div className="flex flex-col gap-2">
@@ -510,7 +510,7 @@ export default function DealsPage({
                     >
                       <CardContent className="pt-4">
                         <div className="flex items-start justify-between gap-2">
-                          <p className="font-medium">{deal.name}</p>
+                          <p className="min-w-0 flex-1 font-medium break-words">{deal.name}</p>
                           <div className="flex shrink-0 gap-0.5">
                             {canUpdate && (
                               <Button
@@ -541,7 +541,7 @@ export default function DealsPage({
                         {deal.line_items && deal.line_items.length > 0 && (
                           <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
                             {deal.line_items.slice(0, 3).map((line) => (
-                              <li key={line.id ?? line.description}>
+                              <li key={line.id ?? line.description} className="break-words">
                                 {line.quantity} × {line.description}
                               </li>
                             ))}
@@ -568,7 +568,7 @@ export default function DealsPage({
                               label: item.name,
                             }))}
                           >
-                            <SelectTrigger className="h-8 w-full text-xs" aria-label={`Move ${deal.name} to another stage`}>
+                            <SelectTrigger className="h-9 w-full text-xs md:h-8" aria-label={`Move ${deal.name} to another stage`}>
                               <SelectValue>
                                 {(currentPipeline?.stages ?? []).find((item) => item.id === deal.stage_id)?.name
                                   ?? deal.stage?.name}

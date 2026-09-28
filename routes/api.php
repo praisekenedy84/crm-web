@@ -244,8 +244,8 @@ Route::prefix('v1')->name('api.')->middleware(['throttle:api'])->group(function 
             Route::delete('{project}', [ProjectController::class, 'destroyProject']);
         });
 
-        // Admin: module configuration
-        Route::middleware('permission:modules.manage')->prefix('modules')->group(function () {
+        // Modules are readable by any tenant user; writes are platform-admin only (403).
+        Route::prefix('modules')->group(function () {
             Route::get('/', [ModuleController::class, 'index']);
             Route::put('/', [ModuleController::class, 'update']);
         });

@@ -243,7 +243,7 @@ export default function ContactsPage({ contacts, accounts, filters }: ContactsPa
           resultLabel={`${contacts.total} contact${contacts.total === 1 ? '' : 's'}`}
         />
         <CardContent className="p-0">
-          <Table>
+          <Table stacked>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -271,14 +271,14 @@ export default function ContactsPage({ contacts, accounts, filters }: ContactsPa
                 </TableRow>
               ) : contacts.data.map((c) => (
                 <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.first_name} {c.last_name}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.email || '-'}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.phone || '-'}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.account?.name || '-'}</TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell className="font-medium max-md:text-base">{c.first_name} {c.last_name}</TableCell>
+                  <TableCell label="Email" className="text-muted-foreground max-md:break-all">{c.email || '-'}</TableCell>
+                  <TableCell label="Phone" className="text-muted-foreground">{c.phone || '-'}</TableCell>
+                  <TableCell label="Shop / Company" className="text-muted-foreground">{c.account?.name || '-'}</TableCell>
+                  <TableCell label="Location" className="text-muted-foreground">
                     {formatAreaLocation(c.area ?? c.account?.area)}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="max-md:pt-2">
                     <RowActions
                       onEdit={canUpdate ? () => openEdit(c) : undefined}
                       onDelete={canDelete ? () => setDeleteTarget(c) : undefined}

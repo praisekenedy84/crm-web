@@ -13,16 +13,29 @@ use Illuminate\Validation\Rules\Password;
 
 class UserController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        return response()->json(User::orderBy('name')->get(['id', 'name', 'email', 'role', 'status', 'last_login_at']));
+        $users = User::query()
+            ->where('tenant_id', $request->user()->tenant_id)
+            ->where('is_platform_admin', false)
+            ->orderBy('name')
+            ->get(['id', 'name', 'email', 'role', 'status', 'last_login_at']);
+
+        return response()->json($users);
     }
 
     public function store(Request $request): JsonResponse
     {
+        $tenantId = $request->user()->tenant_id;
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255'],
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                Rule::unique('users', 'email')->where(fn ($q) => $q->where('tenant_id', $tenantId)),
+            ],
             'password' => ['required', Password::min(8)->mixedCase()->numbers()],
             'role' => ['required', Rule::enum(UserRole::class)],
         ]);
@@ -31,9 +44,10 @@ class UserController extends Controller
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => $data['password'],
-            'tenant_id' => $request->user()->tenant_id,
+            'tenant_id' => $tenantId,
             'status' => 'active',
             'role' => $data['role'],
+            'is_platform_admin' => false,
         ]);
 
         $user->syncPrimaryRole($data['role']);
@@ -43,9 +57,18 @@ class UserController extends Controller
 
     public function update(Request $request, User $user): JsonResponse
     {
+        $this->assertSameTenant($request, $user);
+
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],
-            'email' => ['sometimes', 'email', 'max:255'],
+            'email' => [
+                'sometimes',
+                'email',
+                'max:255',
+                Rule::unique('users', 'email')
+                    ->where(fn ($q) => $q->where('tenant_id', $request->user()->tenant_id))
+                    ->ignore($user->id),
+            ],
             'role' => ['sometimes', Rule::enum(UserRole::class)],
             'status' => ['sometimes', 'in:active,inactive'],
             'password' => ['nullable', Password::min(8)->mixedCase()->numbers()],
@@ -71,14 +94,22 @@ class UserController extends Controller
         return response()->json($user->fresh());
     }
 
-    public function destroy(User $user): JsonResponse
+    public function destroy(Request $request, User $user): JsonResponse
     {
-        if ($user->id === auth()->id()) {
+        $this->assertSameTenant($request, $user);
+
+        if ($user->id === $request->user()->id) {
             return response()->json(['error' => ['message' => 'Cannot delete yourself.']], 422);
         }
 
         $user->delete();
 
         return response()->json(['message' => 'User deleted.']);
+    }
+
+    private function assertSameTenant(Request $request, User $user): void
+    {
+        abort_if($user->is_platform_admin, 404);
+        abort_unless((int) $user->tenant_id === (int) $request->user()->tenant_id, 404);
     }
 }

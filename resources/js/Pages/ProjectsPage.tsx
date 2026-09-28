@@ -169,7 +169,7 @@ export default function ProjectsPage({ projects }: ProjectsPageProps) {
 
       <Card className="border-0 shadow-sm ring-1 ring-border/60">
         <CardContent className="pt-6">
-          <Table>
+          <Table stacked>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -183,12 +183,12 @@ export default function ProjectsPage({ projects }: ProjectsPageProps) {
             <TableBody>
               {projects.data.map((p) => (
                 <TableRow key={p.id}>
-                  <TableCell className="font-medium">{p.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{p.manager?.name ?? '-'}</TableCell>
-                  <TableCell>{p.budget != null ? fmt(p.budget, p.currency) : '-'}</TableCell>
-                  <TableCell>{fmt(p.actual_cost ?? 0, p.currency)}</TableCell>
-                  <TableCell className="capitalize text-muted-foreground">{p.status}</TableCell>
-                  <TableCell>
+                  <TableCell className="font-medium max-md:text-base">{p.name}</TableCell>
+                  <TableCell label="Manager" className="text-muted-foreground">{p.manager?.name ?? '-'}</TableCell>
+                  <TableCell label="Budget">{p.budget != null ? fmt(p.budget, p.currency) : '-'}</TableCell>
+                  <TableCell label="Actual Cost">{fmt(p.actual_cost ?? 0, p.currency)}</TableCell>
+                  <TableCell label="Status" className="capitalize text-muted-foreground">{p.status}</TableCell>
+                  <TableCell className="max-md:pt-2">
                     <RowActions
                       onEdit={() => openEdit(p)}
                       onDelete={() => setDeleteTarget(p)}

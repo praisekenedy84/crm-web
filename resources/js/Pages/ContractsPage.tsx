@@ -183,7 +183,7 @@ export default function ContractsPage({ contracts, services }: ContractsPageProp
 
       <Card className="border-0 shadow-sm ring-1 ring-border/60">
         <CardContent className="pt-6">
-          <Table>
+          <Table stacked>
             <TableHeader>
               <TableRow>
                 <TableHead>Customer</TableHead>
@@ -197,14 +197,14 @@ export default function ContractsPage({ contracts, services }: ContractsPageProp
             <TableBody>
               {contracts.data.map((c) => (
                 <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.party?.name ?? `#${c.customer_party_id}`}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.service?.name ?? '-'}</TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell className="font-medium max-md:text-base">{c.party?.name ?? `#${c.customer_party_id}`}</TableCell>
+                  <TableCell label="Service" className="text-muted-foreground">{c.service?.name ?? '-'}</TableCell>
+                  <TableCell label="Period" className="text-muted-foreground max-md:break-words">
                     {c.start_date} → {c.end_date}
                   </TableCell>
-                  <TableCell>{fmt(c.amount_paid, c.currency)}</TableCell>
-                  <TableCell className="capitalize text-muted-foreground">{c.status}</TableCell>
-                  <TableCell>
+                  <TableCell label="Amount">{fmt(c.amount_paid, c.currency)}</TableCell>
+                  <TableCell label="Status" className="capitalize text-muted-foreground">{c.status}</TableCell>
+                  <TableCell className="max-md:pt-2">
                     <RowActions
                       onEdit={() => openEdit(c)}
                       onDelete={() => setDeleteTarget(c)}

@@ -168,7 +168,7 @@ export default function AccountsPage({ accounts }: AccountsPageProps) {
 
       <Card className="border-0 shadow-sm ring-1 ring-border/60">
         <CardContent className="pt-6">
-          <Table>
+          <Table stacked>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -181,11 +181,11 @@ export default function AccountsPage({ accounts }: AccountsPageProps) {
             <TableBody>
               {accounts.data.map((a) => (
                 <TableRow key={a.id}>
-                  <TableCell className="font-medium">{a.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{a.industry || '-'}</TableCell>
-                  <TableCell className="text-muted-foreground">{formatAreaLocation(a.area)}</TableCell>
-                  <TableCell className="text-muted-foreground">{a.phone || '-'}</TableCell>
-                  <TableCell>
+                  <TableCell className="font-medium max-md:text-base">{a.name}</TableCell>
+                  <TableCell label="Industry" className="text-muted-foreground">{a.industry || '-'}</TableCell>
+                  <TableCell label="Location" className="text-muted-foreground max-md:break-words">{formatAreaLocation(a.area)}</TableCell>
+                  <TableCell label="Phone" className="text-muted-foreground">{a.phone || '-'}</TableCell>
+                  <TableCell className="max-md:pt-2">
                     <RowActions
                       onEdit={canUpdate ? () => openEdit(a) : undefined}
                       onDelete={canDelete ? () => setDeleteTarget(a) : undefined}

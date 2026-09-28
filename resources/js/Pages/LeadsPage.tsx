@@ -278,7 +278,7 @@ export default function LeadsPage({ leads, contacts = [], filters }: LeadsPagePr
           resultLabel={`${leads.total} lead${leads.total === 1 ? '' : 's'}`}
         />
         <CardContent className="p-0">
-          <Table>
+          <Table stacked>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -306,18 +306,18 @@ export default function LeadsPage({ leads, contacts = [], filters }: LeadsPagePr
                 </TableRow>
               ) : leads.data.map((lead) => (
                 <TableRow key={lead.id}>
-                  <TableCell className="font-medium">{lead.first_name} {lead.last_name}</TableCell>
-                  <TableCell>{lead.company || '-'}</TableCell>
-                  <TableCell>{lead.source || '-'}</TableCell>
-                  <TableCell>
+                  <TableCell className="font-medium max-md:text-base">{lead.first_name} {lead.last_name}</TableCell>
+                  <TableCell label="Company">{lead.company || '-'}</TableCell>
+                  <TableCell label="Source">{lead.source || '-'}</TableCell>
+                  <TableCell label="Score">
                     <Badge variant="secondary">{lead.score ?? 0}</Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell label="Status">
                     <Badge variant={statusVariant[lead.status] ?? 'outline'} className="capitalize">
                       {lead.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="max-md:pt-2">
                     <RowActions
                       onEdit={() => openEdit(lead)}
                       onDelete={() => setDeleteTarget(lead)}

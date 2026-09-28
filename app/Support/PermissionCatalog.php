@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Enums\PlatformModule;
+
 /**
  * Product permission catalog and default role → permission matrix.
  * Namespaced strings are the Spatie permission names.
@@ -11,6 +13,33 @@ final class PermissionCatalog
     public const CRM_RESOURCES = ['contacts', 'accounts', 'leads', 'deals', 'tasks'];
 
     public const VIEW_SCOPES = ['own', 'team', 'all'];
+
+    /**
+     * Permission group → platform module (null = always available for tenant admins).
+     *
+     * @return array<string, string|null>
+     */
+    public static function groupModules(): array
+    {
+        return [
+            'Contacts' => PlatformModule::Crm->value,
+            'Accounts' => PlatformModule::Crm->value,
+            'Leads' => PlatformModule::Crm->value,
+            'Deals' => PlatformModule::Crm->value,
+            'Tasks' => PlatformModule::Crm->value,
+            'Marketing' => PlatformModule::Crm->value,
+            'Reports' => PlatformModule::Crm->value,
+            'Settings' => null,
+            'Admin' => null,
+            'Finance' => PlatformModule::Finance->value,
+            'Inventory' => PlatformModule::Inventory->value,
+            'HR' => PlatformModule::Hr->value,
+            'Projects' => PlatformModule::Projects->value,
+            'Contracts' => PlatformModule::Crm->value,
+            'Expenses' => PlatformModule::Finance->value,
+            'Areas' => PlatformModule::Crm->value,
+        ];
+    }
 
     /**
      * @return list<string>
@@ -44,7 +73,6 @@ final class PermissionCatalog
             'users.manage',
             'roles.manage',
             'api_keys.manage',
-            'modules.manage',
             'finance.view',
             'finance.create',
             'inventory.view',
@@ -106,7 +134,7 @@ final class PermissionCatalog
         $groups['Marketing'] = ['marketing.view', 'marketing.create', 'marketing.manage'];
         $groups['Reports'] = ['reports.view', 'analytics.view', 'import.run'];
         $groups['Settings'] = ['settings.view', 'settings.manage'];
-        $groups['Admin'] = ['users.view', 'users.manage', 'roles.manage', 'api_keys.manage', 'modules.manage'];
+        $groups['Admin'] = ['users.view', 'users.manage', 'roles.manage', 'api_keys.manage'];
         $groups['Finance'] = ['finance.view', 'finance.create'];
         $groups['Inventory'] = ['inventory.view', 'inventory.create', 'inventory.update', 'inventory.delete'];
         $groups['HR'] = ['hr.view', 'hr.create', 'hr.update', 'hr.delete', 'hr.leave.approve'];
@@ -116,6 +144,43 @@ final class PermissionCatalog
         $groups['Areas'] = ['areas.view', 'areas.create', 'areas.update'];
 
         return $groups;
+    }
+
+    /**
+     * Permission groups visible for a tenant given its enabled modules.
+     *
+     * @param  list<string>  $enabledModules
+     * @return array<string, list<string>>
+     */
+    public static function groupsForModules(array $enabledModules): array
+    {
+        $enabled = array_values(array_unique($enabledModules));
+        $filtered = [];
+
+        foreach (self::groups() as $group => $perms) {
+            $module = self::groupModules()[$group] ?? null;
+            if ($module === null || in_array($module, $enabled, true)) {
+                $filtered[$group] = $perms;
+            }
+        }
+
+        return $filtered;
+    }
+
+    /**
+     * Flat permission list allowed for a tenant's enabled modules.
+     *
+     * @param  list<string>  $enabledModules
+     * @return list<string>
+     */
+    public static function permissionsForModules(array $enabledModules): array
+    {
+        $groups = self::groupsForModules($enabledModules);
+        if ($groups === []) {
+            return [];
+        }
+
+        return array_values(array_unique(array_merge(...array_values($groups))));
     }
 
     /**

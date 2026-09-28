@@ -580,13 +580,13 @@ export default function MarketingPage({ items, contributors, filters }: Marketin
             ) : backlog.map((item) => (
               <div key={item.id} className="space-y-1.5">
                 <ContentSummary item={item} onEdit={canManage ? openEdit : undefined} />
-                <div className="flex items-center justify-between px-1 text-[11px] text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <UserRound className="size-3" />
-                    {item.submitter?.name ?? 'Team member'}
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1 text-[11px] text-muted-foreground">
+                  <span className="flex min-w-0 items-center gap-1">
+                    <UserRound className="size-3 shrink-0" />
+                    <span className="truncate">{item.submitter?.name ?? 'Team member'}</span>
                   </span>
                   {item.proposed_date && (
-                    <span>Prefers {new Date(`${item.proposed_date.slice(0, 10)}T00:00:00`).toLocaleDateString()}</span>
+                    <span className="shrink-0">Prefers {new Date(`${item.proposed_date.slice(0, 10)}T00:00:00`).toLocaleDateString()}</span>
                   )}
                 </div>
               </div>

@@ -25,18 +25,18 @@ export function StatCard({ label, value, trend, sub, icon: Icon, tone = 'neutral
     <Card className="relative overflow-hidden border-0 shadow-sm ring-1 ring-border/70">
       <CardContent className="py-5">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+          <p className="min-w-0 truncate text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
             {label}
           </p>
           {Icon && (
-            <span className={cn('flex size-8 items-center justify-center rounded-xl', toneStyles[tone])}>
+            <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-xl', toneStyles[tone])}>
               <Icon className="size-4" />
             </span>
           )}
           {trend !== undefined && (
             <span
               className={cn(
-                'inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold',
+                'inline-flex shrink-0 items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold',
                 isPositive ? 'bg-success/10 text-success-foreground' : 'bg-destructive/10 text-destructive'
               )}
             >

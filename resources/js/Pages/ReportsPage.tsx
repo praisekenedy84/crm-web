@@ -93,25 +93,25 @@ export default function ReportsPage({
         <Card>
           <CardHeader>
             <CardDescription>Sales Done</CardDescription>
-            <CardTitle className="text-2xl">{salesDone.totals.deal_count}</CardTitle>
+            <CardTitle className="text-xl tabular-nums sm:text-2xl">{salesDone.totals.deal_count}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader>
             <CardDescription>Revenue Closed</CardDescription>
-            <CardTitle className="text-2xl">{fmt(salesDone.totals.revenue)}</CardTitle>
+            <CardTitle className="text-xl tabular-nums sm:text-2xl">{fmt(salesDone.totals.revenue)}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader>
             <CardDescription>Pipeline</CardDescription>
-            <CardTitle className="text-2xl">{fmt(forecast.totals.pipeline)}</CardTitle>
+            <CardTitle className="text-xl tabular-nums sm:text-2xl">{fmt(forecast.totals.pipeline)}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader>
             <CardDescription>Weighted Forecast</CardDescription>
-            <CardTitle className="text-2xl">{fmt(forecast.totals.weighted)}</CardTitle>
+            <CardTitle className="text-xl tabular-nums sm:text-2xl">{fmt(forecast.totals.weighted)}</CardTitle>
           </CardHeader>
         </Card>
       </div>
@@ -124,7 +124,7 @@ export default function ReportsPage({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table stacked>
             <TableHeader>
               <TableRow>
                 <TableHead>Deal</TableHead>
@@ -144,26 +144,26 @@ export default function ReportsPage({
               ) : (
                 salesDone.sales.flatMap((sale) => [
                   <TableRow key={sale.id}>
-                    <TableCell className="font-medium">{sale.name}</TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="font-medium max-md:text-base max-md:break-words">{sale.name}</TableCell>
+                    <TableCell label="Account / Contact" className="text-muted-foreground">
                       {sale.account_name || sale.contact_name || '-'}
                     </TableCell>
-                    <TableCell>{sale.owner_name}</TableCell>
-                    <TableCell className="text-muted-foreground">{sale.closed_at || '-'}</TableCell>
-                    <TableCell className="text-right font-medium">{fmt(sale.value)}</TableCell>
+                    <TableCell label="Rep">{sale.owner_name}</TableCell>
+                    <TableCell label="Closed" className="text-muted-foreground">{sale.closed_at || '-'}</TableCell>
+                    <TableCell label="Value" className="text-right font-medium tabular-nums">{fmt(sale.value)}</TableCell>
                   </TableRow>,
                   ...(sale.lines?.length
                     ? [
                         <TableRow key={`${sale.id}-lines`} className="bg-muted/30 hover:bg-muted/30">
-                          <TableCell colSpan={5} className="py-2">
+                          <TableCell colSpan={5} className="py-2 max-md:px-3">
                             <ul className="space-y-1 text-xs text-muted-foreground">
                               {sale.lines.map((line) => (
                                 <li key={line.id} className="flex flex-wrap items-center justify-between gap-2">
-                                  <span>
+                                  <span className="min-w-0 break-words">
                                     {line.quantity} × {line.description}
                                     {line.product_name ? ' · Product' : line.service_name ? ' · Service' : ''}
                                   </span>
-                                  <span className="font-medium text-foreground">{fmt(line.total)}</span>
+                                  <span className="shrink-0 font-medium text-foreground tabular-nums">{fmt(line.total)}</span>
                                 </li>
                               ))}
                             </ul>
@@ -188,9 +188,9 @@ export default function ReportsPage({
               <p className="text-sm text-muted-foreground">No open deals with expected close dates</p>
             )}
             {forecast.monthly.map((m) => (
-              <div key={m.month} className="flex justify-between text-sm">
-                <span>{m.month}</span>
-                <span className="font-medium">{fmt(m.weighted_value)} ({m.deal_count} deals)</span>
+              <div key={m.month} className="flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                <span className="min-w-0 truncate">{m.month}</span>
+                <span className="font-medium tabular-nums sm:shrink-0">{fmt(m.weighted_value)} ({m.deal_count} deals)</span>
               </div>
             ))}
           </CardContent>
@@ -203,9 +203,9 @@ export default function ReportsPage({
           <CardContent className="space-y-2">
             {customReports.length === 0 && <p className="text-sm text-muted-foreground">No custom reports yet</p>}
             {customReports.map((r) => (
-              <div key={r.id} className="flex justify-between rounded-lg bg-muted px-3 py-2 text-sm">
-                <span>{r.name}</span>
-                <span className="text-muted-foreground">{r.object_type} · {r.chart_type}</span>
+              <div key={r.id} className="flex flex-col gap-1 rounded-lg bg-muted px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                <span className="min-w-0 truncate">{r.name}</span>
+                <span className="min-w-0 break-words text-muted-foreground sm:text-right">{r.object_type} · {r.chart_type}</span>
               </div>
             ))}
           </CardContent>
@@ -221,7 +221,7 @@ export default function ReportsPage({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
+            <Table stacked>
               <TableHeader>
                 <TableRow>
                   <TableHead>Area</TableHead>
@@ -239,9 +239,9 @@ export default function ReportsPage({
                 )}
                 {visits.visits.map((v, i) => (
                   <TableRow key={`${v.area_id}-${v.owner_id}-${i}`}>
-                    <TableCell className="font-medium">{v.area_name}</TableCell>
-                    <TableCell className="text-muted-foreground">{v.owner_name}</TableCell>
-                    <TableCell>{v.visit_count}</TableCell>
+                    <TableCell className="font-medium max-md:text-base">{v.area_name}</TableCell>
+                    <TableCell label="Rep" className="text-muted-foreground">{v.owner_name}</TableCell>
+                    <TableCell label="Visits" className="tabular-nums">{v.visit_count}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -257,7 +257,7 @@ export default function ReportsPage({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
+            <Table stacked>
               <TableHeader>
                 <TableRow>
                   <TableHead>Rep</TableHead>
@@ -275,9 +275,9 @@ export default function ReportsPage({
                 )}
                 {leadsPerRep.leads.map((l, i) => (
                   <TableRow key={`${l.owner_id}-${l.date}-${i}`}>
-                    <TableCell className="font-medium">{l.owner_name}</TableCell>
-                    <TableCell className="text-muted-foreground">{l.date}</TableCell>
-                    <TableCell>{l.lead_count}</TableCell>
+                    <TableCell className="font-medium max-md:text-base">{l.owner_name}</TableCell>
+                    <TableCell label="Date" className="text-muted-foreground">{l.date}</TableCell>
+                    <TableCell label="Leads" className="tabular-nums">{l.lead_count}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

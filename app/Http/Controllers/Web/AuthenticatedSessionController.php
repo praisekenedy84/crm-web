@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Services\AuthenticationService;
+use App\Services\ImpersonationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -12,11 +13,18 @@ use Inertia\Response;
 
 class AuthenticatedSessionController extends Controller
 {
-    public function __construct(private readonly AuthenticationService $auth) {}
+    public function __construct(
+        private readonly AuthenticationService $auth,
+        private readonly ImpersonationService $impersonation,
+    ) {}
 
     public function create(): Response|RedirectResponse
     {
         if (Auth::check()) {
+            if (Auth::user()?->is_platform_admin) {
+                return redirect()->route('platform.god-eye');
+            }
+
             return redirect()->route('dashboard');
         }
 
@@ -34,14 +42,22 @@ class AuthenticatedSessionController extends Controller
         // Inertia surfaces back on the login page as form errors.
         $user = $this->auth->attempt($credentials['email'], $credentials['password']);
 
+        $this->impersonation->clear($request);
+
         Auth::login($user, $request->boolean('remember'));
         $request->session()->regenerate();
+
+        if ($user->is_platform_admin) {
+            return redirect()->intended(route('platform.god-eye'));
+        }
 
         return redirect()->intended(route('dashboard'));
     }
 
     public function destroy(Request $request): RedirectResponse
     {
+        $this->impersonation->clear($request);
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();

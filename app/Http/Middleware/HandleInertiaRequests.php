@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\Area;
 use App\Services\AuthenticationService;
+use App\Services\ImpersonationService;
 use App\Services\PermissionService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -20,6 +21,7 @@ class HandleInertiaRequests extends Middleware
     public function __construct(
         private readonly AuthenticationService $auth,
         private readonly PermissionService $permissions,
+        private readonly ImpersonationService $impersonation,
     ) {}
 
     /**
@@ -41,6 +43,7 @@ class HandleInertiaRequests extends Middleware
                     : null,
                 'permissions' => $user ? $this->permissions->abilitiesFor($user) : [],
                 'scopes' => $user ? $this->permissions->scopesFor($user) : [],
+                'impersonation' => $user ? $this->impersonation->share($request) : ['active' => false],
             ],
 
             'flash' => [
@@ -49,7 +52,7 @@ class HandleInertiaRequests extends Middleware
             ],
 
             // Flat area list for AreaPicker / territory UI - lazy so login never hits the table.
-            'areas' => fn () => $user
+            'areas' => fn () => ($user && $user->tenant_id)
                 ? Area::query()->orderBy('name')->get(['id', 'name', 'level', 'parent_area_id'])
                 : [],
         ];

@@ -72,7 +72,8 @@ class AuthenticationService
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
-            'role' => $user->role->value,
+            'role' => $user->role?->value ?? 'admin',
+            'is_platform_admin' => (bool) $user->is_platform_admin,
             'tenant' => $user->tenant ? [
                 'id' => $user->tenant->id,
                 'name' => $user->tenant->name,

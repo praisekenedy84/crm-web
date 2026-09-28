@@ -47,10 +47,10 @@ export function CloseDealDialog({
       onClick={(event) => {
         if (event.target === dialogRef.current && !isSubmitting) onCancel();
       }}
-      className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-2xl border-0 bg-card p-0 text-card-foreground shadow-2xl backdrop:bg-foreground/45 backdrop:backdrop-blur-[2px]"
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border-0 bg-card p-0 text-card-foreground shadow-2xl backdrop:bg-foreground/45 backdrop:backdrop-blur-[2px]"
     >
       <form
-        className="p-6"
+        className="p-5 sm:p-6"
         onSubmit={(event) => {
           event.preventDefault();
           if (reason.trim()) onConfirm();
@@ -59,7 +59,7 @@ export function CloseDealDialog({
         <div className="mb-5 flex size-11 items-center justify-center rounded-2xl bg-warning/15 text-warning-foreground">
           <Flag className="size-5" />
         </div>
-        <h2 id={titleId} className="font-heading text-xl font-semibold tracking-tight">
+        <h2 id={titleId} className="font-heading text-lg font-semibold tracking-tight break-words sm:text-xl">
           Move "{dealName}" to {stageName}?
         </h2>
         <p id={descriptionId} className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -75,12 +75,14 @@ export function CloseDealDialog({
             rows={4}
             autoFocus
             required
-            className="w-full resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none transition-shadow placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+            className="w-full resize-none rounded-xl border border-input bg-background px-3 py-2 text-base outline-none transition-shadow placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 md:text-sm"
           />
         </div>
         <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>Cancel</Button>
-          <Button type="submit" disabled={!reason.trim() || isSubmitting}>
+          <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting} className="w-full sm:w-auto">
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!reason.trim() || isSubmitting} className="w-full sm:w-auto">
             {isSubmitting ? 'Moving deal...' : `Move to ${stageName}`}
           </Button>
         </div>

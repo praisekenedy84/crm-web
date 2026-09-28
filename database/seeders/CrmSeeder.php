@@ -33,26 +33,29 @@ class CrmSeeder extends Seeder
 
         TenantContext::set($tenant);
 
+        app(\App\Services\TenantProvisioningService::class)->provisionRoles($tenant->id);
+        setPermissionsTeamId($tenant->id);
+
         $admin = User::query()->firstOrCreate(
-            ['email' => 'admin@demo.com'],
+            ['email' => 'admin@demo.com', 'tenant_id' => $tenant->id],
             [
-                'tenant_id' => $tenant->id,
                 'name' => 'Admin User',
                 'password' => Hash::make('Password1'),
                 'role' => UserRole::Admin,
                 'status' => 'active',
+                'is_platform_admin' => false,
             ],
         );
         $admin->syncPrimaryRole(UserRole::Admin);
 
         $rep = User::query()->firstOrCreate(
-            ['email' => 'rep@demo.com'],
+            ['email' => 'rep@demo.com', 'tenant_id' => $tenant->id],
             [
-                'tenant_id' => $tenant->id,
                 'name' => 'Sales Rep',
                 'password' => Hash::make('Password1'),
                 'role' => UserRole::Rep,
                 'status' => 'active',
+                'is_platform_admin' => false,
             ],
         );
         $rep->syncPrimaryRole(UserRole::Rep);

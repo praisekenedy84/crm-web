@@ -28,7 +28,7 @@ export default function AuditLogsPage({ auditLogs }: AuditLogsPageProps) {
 
       <Card className="gap-0 border-0 py-0 shadow-sm ring-1 ring-border/70">
         <CardContent className="p-0">
-          <Table>
+          <Table stacked>
             <TableHeader>
               <TableRow>
                 <TableHead>Action</TableHead>
@@ -51,12 +51,12 @@ export default function AuditLogsPage({ auditLogs }: AuditLogsPageProps) {
               ) : (
                 auditLogs.data.map((log) => (
                   <TableRow key={log.id}>
-                    <TableCell className="font-medium capitalize">{log.action.replace(/[._]/g, ' ')}</TableCell>
-                    <TableCell>
+                    <TableCell className="font-medium capitalize max-md:text-base max-md:break-words">{log.action.replace(/[._]/g, ' ')}</TableCell>
+                    <TableCell label="Object" className="max-md:break-all">
                       {objectLabel(log.object_type)} #{log.object_id}
                     </TableCell>
-                    <TableCell>{log.user?.name ?? '-'}</TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell label="User">{log.user?.name ?? '-'}</TableCell>
+                    <TableCell label="When" className="text-muted-foreground">
                       {new Date(log.created_at).toLocaleString()}
                     </TableCell>
                   </TableRow>

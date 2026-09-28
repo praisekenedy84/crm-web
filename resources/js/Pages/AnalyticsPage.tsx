@@ -23,7 +23,7 @@ export default function AnalyticsPage({ analytics }: AnalyticsPageProps) {
           <Card key={key}>
             <CardHeader>
               <CardDescription className="uppercase">{key.replace(/_/g, ' ')}</CardDescription>
-              <CardTitle className="text-2xl">{val}</CardTitle>
+              <CardTitle className="text-xl tabular-nums sm:text-2xl">{val}</CardTitle>
             </CardHeader>
           </Card>
         ))}
@@ -35,17 +35,17 @@ export default function AnalyticsPage({ analytics }: AnalyticsPageProps) {
             <CardTitle>Revenue</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span>Won Total</span>
-              <span className="font-semibold">{fmt(analytics.revenue.won_total ?? 0)}</span>
+            <div className="flex justify-between gap-3">
+              <span className="min-w-0 truncate">Won Total</span>
+              <span className="shrink-0 font-semibold tabular-nums">{fmt(analytics.revenue.won_total ?? 0)}</span>
             </div>
-            <div className="flex justify-between">
-              <span>Pipeline Total</span>
-              <span className="font-semibold">{fmt(analytics.revenue.pipeline_total ?? 0)}</span>
+            <div className="flex justify-between gap-3">
+              <span className="min-w-0 truncate">Pipeline Total</span>
+              <span className="shrink-0 font-semibold tabular-nums">{fmt(analytics.revenue.pipeline_total ?? 0)}</span>
             </div>
-            <div className="flex justify-between">
-              <span>Avg Days to Close</span>
-              <span className="font-semibold">{analytics.deal_velocity ? Math.round(analytics.deal_velocity) : '-'} days</span>
+            <div className="flex justify-between gap-3">
+              <span className="min-w-0 truncate">Avg Days to Close</span>
+              <span className="shrink-0 font-semibold tabular-nums">{analytics.deal_velocity ? Math.round(analytics.deal_velocity) : '-'} days</span>
             </div>
           </CardContent>
         </Card>
@@ -59,9 +59,9 @@ export default function AnalyticsPage({ analytics }: AnalyticsPageProps) {
               <p className="text-sm text-muted-foreground">No lead sources yet</p>
             )}
             {analytics.top_lead_sources.map((s) => (
-              <div key={s.source} className="flex justify-between text-sm">
-                <span>{s.source ?? 'Unknown'}</span>
-                <span className="font-medium">{s.count}</span>
+              <div key={s.source} className="flex justify-between gap-3 text-sm">
+                <span className="min-w-0 truncate">{s.source ?? 'Unknown'}</span>
+                <span className="shrink-0 font-medium tabular-nums">{s.count}</span>
               </div>
             ))}
           </CardContent>
@@ -77,13 +77,13 @@ export default function AnalyticsPage({ analytics }: AnalyticsPageProps) {
                 <Card>
                   <CardHeader>
                     <CardDescription>Outstanding AR</CardDescription>
-                    <CardTitle className="text-xl">{fmt(analytics.finance.outstanding_receivables)}</CardTitle>
+                    <CardTitle className="text-xl tabular-nums">{fmt(analytics.finance.outstanding_receivables)}</CardTitle>
                   </CardHeader>
                 </Card>
                 <Card>
                   <CardHeader>
                     <CardDescription>Paid This Month</CardDescription>
-                    <CardTitle className="text-xl">{fmt(analytics.finance.paid_this_month)}</CardTitle>
+                    <CardTitle className="text-xl tabular-nums">{fmt(analytics.finance.paid_this_month)}</CardTitle>
                   </CardHeader>
                 </Card>
               </>
@@ -92,7 +92,7 @@ export default function AnalyticsPage({ analytics }: AnalyticsPageProps) {
               <Card>
                 <CardHeader>
                   <CardDescription>Stock Value</CardDescription>
-                  <CardTitle className="text-xl">{fmt(analytics.inventory.stock_value)}</CardTitle>
+                  <CardTitle className="text-xl tabular-nums">{fmt(analytics.inventory.stock_value)}</CardTitle>
                 </CardHeader>
               </Card>
             )}
@@ -100,7 +100,7 @@ export default function AnalyticsPage({ analytics }: AnalyticsPageProps) {
               <Card>
                 <CardHeader>
                   <CardDescription>Headcount Cost / Month</CardDescription>
-                  <CardTitle className="text-xl">{fmt(analytics.hr.payroll_cost_this_month)}</CardTitle>
+                  <CardTitle className="text-xl tabular-nums">{fmt(analytics.hr.payroll_cost_this_month)}</CardTitle>
                 </CardHeader>
               </Card>
             )}
@@ -108,7 +108,7 @@ export default function AnalyticsPage({ analytics }: AnalyticsPageProps) {
               <Card>
                 <CardHeader>
                   <CardDescription>Active Project Budget</CardDescription>
-                  <CardTitle className="text-xl">{fmt(analytics.projects.total_budget)}</CardTitle>
+                  <CardTitle className="text-xl tabular-nums">{fmt(analytics.projects.total_budget)}</CardTitle>
                 </CardHeader>
               </Card>
             )}

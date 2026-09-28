@@ -35,7 +35,7 @@ export function ListToolbar({
             value={value}
             onChange={(event) => onChange(event.target.value)}
             placeholder={placeholder}
-            className="h-9 pl-9 pr-9"
+            className="h-10 pl-9 pr-10 md:h-9 md:pr-9"
             aria-label={placeholder}
           />
           {value && (
@@ -45,14 +45,14 @@ export function ListToolbar({
                 onChange('');
                 onSearch('');
               }}
-              className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="absolute right-1.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:right-2 md:size-6"
               aria-label="Clear search"
             >
               <X className="size-3.5" />
             </button>
           )}
         </div>
-        <Button type="submit" variant="outline" className="h-9">Search</Button>
+        <Button type="submit" variant="outline" className="h-10 md:h-9">Search</Button>
       </form>
       <div className="flex items-center justify-between gap-3 sm:justify-end">
         {resultLabel && <p className="text-xs font-medium text-muted-foreground">{resultLabel}</p>}

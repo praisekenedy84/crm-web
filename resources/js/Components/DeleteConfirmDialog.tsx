@@ -42,13 +42,13 @@ export function DeleteConfirmDialog({
       onClick={(event) => {
         if (event.target === dialogRef.current && !isDeleting) onCancel();
       }}
-      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border-0 bg-card p-0 text-card-foreground shadow-2xl backdrop:bg-foreground/45 backdrop:backdrop-blur-[2px]"
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-2xl border-0 bg-card p-0 text-card-foreground shadow-2xl backdrop:bg-foreground/45 backdrop:backdrop-blur-[2px]"
     >
-      <div className="p-6">
+      <div className="p-5 sm:p-6">
         <div className="mb-5 flex size-11 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
           <AlertTriangle className="size-5" />
         </div>
-        <h2 id={titleId} className="font-heading text-xl font-semibold tracking-tight">{title}</h2>
+        <h2 id={titleId} className="font-heading text-lg font-semibold tracking-tight break-words sm:text-xl">{title}</h2>
         <p id={descriptionId} className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
         <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={onCancel} disabled={isDeleting} className="w-full sm:w-auto">

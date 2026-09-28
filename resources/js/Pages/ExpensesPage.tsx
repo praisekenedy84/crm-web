@@ -175,7 +175,7 @@ export default function ExpensesPage({ expenses, categories }: ExpensesPageProps
 
       <Card className="border-0 shadow-sm ring-1 ring-border/60">
         <CardContent className="pt-6">
-          <Table>
+          <Table stacked>
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
@@ -189,12 +189,12 @@ export default function ExpensesPage({ expenses, categories }: ExpensesPageProps
             <TableBody>
               {expenses.data.map((e) => (
                 <TableRow key={e.id}>
-                  <TableCell className="text-muted-foreground">{expenseDate(e)}</TableCell>
-                  <TableCell>{e.category?.name ?? '-'}</TableCell>
-                  <TableCell className="text-muted-foreground">{e.description || '-'}</TableCell>
-                  <TableCell className="font-medium">{fmt(e.amount)}</TableCell>
-                  <TableCell className="capitalize text-muted-foreground">{e.status}</TableCell>
-                  <TableCell>
+                  <TableCell className="text-muted-foreground max-md:text-base">{expenseDate(e)}</TableCell>
+                  <TableCell label="Category">{e.category?.name ?? '-'}</TableCell>
+                  <TableCell label="Description" className="text-muted-foreground max-md:break-words">{e.description || '-'}</TableCell>
+                  <TableCell label="Amount" className="font-medium">{fmt(e.amount)}</TableCell>
+                  <TableCell label="Status" className="capitalize text-muted-foreground">{e.status}</TableCell>
+                  <TableCell className="max-md:pt-2">
                     <RowActions
                       onEdit={() => openEdit(e)}
                       onDelete={() => setDeleteTarget(e)}

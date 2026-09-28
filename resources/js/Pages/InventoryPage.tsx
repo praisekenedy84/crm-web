@@ -153,7 +153,7 @@ export default function InventoryPage({ tab, products, stock, orders }: Inventor
         </FormCard>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {(['products', 'stock', 'orders'] as const).map((t) => (
           <Button
             key={t}
@@ -175,7 +175,7 @@ export default function InventoryPage({ tab, products, stock, orders }: Inventor
         </CardHeader>
         <CardContent>
           {tab === 'products' && (
-            <Table>
+            <Table stacked>
               <TableHeader>
                 <TableRow>
                   <TableHead>SKU</TableHead>
@@ -188,11 +188,11 @@ export default function InventoryPage({ tab, products, stock, orders }: Inventor
               <TableBody>
                 {products.data.map((p) => (
                   <TableRow key={p.id}>
-                    <TableCell className="font-medium">{p.sku}</TableCell>
-                    <TableCell>{p.name}</TableCell>
-                    <TableCell>{fmt(p.unit_price)}</TableCell>
-                    <TableCell className="text-muted-foreground">{p.is_active ? 'Yes' : 'No'}</TableCell>
-                    <TableCell>
+                    <TableCell className="font-medium max-md:text-base max-md:break-all">{p.sku}</TableCell>
+                    <TableCell label="Name">{p.name}</TableCell>
+                    <TableCell label="Price">{fmt(p.unit_price)}</TableCell>
+                    <TableCell label="Active" className="text-muted-foreground">{p.is_active ? 'Yes' : 'No'}</TableCell>
+                    <TableCell className="max-md:pt-2">
                       <RowActions
                         onEdit={() => openEdit(p)}
                         onDelete={() => setDeleteProduct(p)}
@@ -205,7 +205,7 @@ export default function InventoryPage({ tab, products, stock, orders }: Inventor
           )}
 
           {tab === 'stock' && (
-            <Table>
+            <Table stacked>
               <TableHeader>
                 <TableRow>
                   <TableHead>Product</TableHead>
@@ -216,9 +216,9 @@ export default function InventoryPage({ tab, products, stock, orders }: Inventor
               <TableBody>
                 {stock.data.map((s) => (
                   <TableRow key={s.id}>
-                    <TableCell className="font-medium">{s.product?.name ?? `#${s.product_id}`}</TableCell>
-                    <TableCell className="text-muted-foreground">{s.warehouse?.name ?? `#${s.warehouse_id}`}</TableCell>
-                    <TableCell>{s.quantity}</TableCell>
+                    <TableCell className="font-medium max-md:text-base">{s.product?.name ?? `#${s.product_id}`}</TableCell>
+                    <TableCell label="Warehouse" className="text-muted-foreground">{s.warehouse?.name ?? `#${s.warehouse_id}`}</TableCell>
+                    <TableCell label="Quantity">{s.quantity}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -226,7 +226,7 @@ export default function InventoryPage({ tab, products, stock, orders }: Inventor
           )}
 
           {tab === 'orders' && (
-            <Table>
+            <Table stacked>
               <TableHeader>
                 <TableRow>
                   <TableHead>PO Number</TableHead>
@@ -239,11 +239,11 @@ export default function InventoryPage({ tab, products, stock, orders }: Inventor
               <TableBody>
                 {orders.data.map((o) => (
                   <TableRow key={o.id}>
-                    <TableCell className="font-medium">{o.po_number}</TableCell>
-                    <TableCell className="text-muted-foreground">{o.order_date}</TableCell>
-                    <TableCell>{fmt(o.total_amount)}</TableCell>
-                    <TableCell className="capitalize text-muted-foreground">{o.status}</TableCell>
-                    <TableCell>
+                    <TableCell className="font-medium max-md:text-base max-md:break-all">{o.po_number}</TableCell>
+                    <TableCell label="Order Date" className="text-muted-foreground">{o.order_date}</TableCell>
+                    <TableCell label="Total">{fmt(o.total_amount)}</TableCell>
+                    <TableCell label="Status" className="capitalize text-muted-foreground">{o.status}</TableCell>
+                    <TableCell className="max-md:pt-2">
                       <RowActions
                         onDelete={() => setDeleteOrder(o)}
                         disableDelete={o.status !== 'draft'}

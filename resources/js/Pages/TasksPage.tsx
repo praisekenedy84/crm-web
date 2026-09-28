@@ -519,7 +519,7 @@ export default function TasksPage({ tasks, filters, calendar }: TasksPageProps) 
                     >
                       <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="min-w-0 space-y-1.5">
-                          <p className={cn('font-medium', isDone && 'text-muted-foreground line-through')}>
+                          <p className={cn('font-medium break-words', isDone && 'text-muted-foreground line-through')}>
                             {task.title}
                           </p>
                           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

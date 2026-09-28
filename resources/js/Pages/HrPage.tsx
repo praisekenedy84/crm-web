@@ -139,7 +139,7 @@ export default function HrPage({ tab, leaveRequests, employees }: HrPageProps) {
         </FormCard>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button
           variant={tab === 'leave' ? 'secondary' : 'outline'}
           size="sm"
@@ -162,7 +162,7 @@ export default function HrPage({ tab, leaveRequests, employees }: HrPageProps) {
         </CardHeader>
         <CardContent>
           {tab === 'leave' && (
-            <Table>
+            <Table stacked>
               <TableHeader>
                 <TableRow>
                   <TableHead>Employee</TableHead>
@@ -176,16 +176,16 @@ export default function HrPage({ tab, leaveRequests, employees }: HrPageProps) {
               <TableBody>
                 {leaveRequests.data.map((lr) => (
                   <TableRow key={lr.id}>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium max-md:text-base">
                       {lr.employee_party?.name ?? `#${lr.employee_party_id}`}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{lr.leave_type?.name ?? '-'}</TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell label="Type" className="text-muted-foreground">{lr.leave_type?.name ?? '-'}</TableCell>
+                    <TableCell label="Period" className="text-muted-foreground max-md:break-words">
                       {lr.start_date} → {lr.end_date}
                     </TableCell>
-                    <TableCell>{lr.days_requested}</TableCell>
-                    <TableCell className="capitalize text-muted-foreground">{lr.status}</TableCell>
-                    <TableCell>
+                    <TableCell label="Days">{lr.days_requested}</TableCell>
+                    <TableCell label="Status" className="capitalize text-muted-foreground">{lr.status}</TableCell>
+                    <TableCell className="max-md:pt-2">
                       <RowActions
                         onDelete={can('hr.delete') ? () => setDeleteLeave(lr) : undefined}
                         disableDelete={lr.status !== 'pending'}
@@ -209,7 +209,7 @@ export default function HrPage({ tab, leaveRequests, employees }: HrPageProps) {
           )}
 
           {tab === 'employees' && (
-            <Table>
+            <Table stacked>
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
@@ -222,11 +222,11 @@ export default function HrPage({ tab, leaveRequests, employees }: HrPageProps) {
               <TableBody>
                 {employees.data.map((e) => (
                   <TableRow key={e.id}>
-                    <TableCell className="font-medium">{e.party?.name ?? `#${e.party_id}`}</TableCell>
-                    <TableCell className="text-muted-foreground">{e.department || '-'}</TableCell>
-                    <TableCell className="text-muted-foreground">{e.job_title || '-'}</TableCell>
-                    <TableCell className="capitalize text-muted-foreground">{e.employment_status}</TableCell>
-                    <TableCell>
+                    <TableCell className="font-medium max-md:text-base">{e.party?.name ?? `#${e.party_id}`}</TableCell>
+                    <TableCell label="Department" className="text-muted-foreground">{e.department || '-'}</TableCell>
+                    <TableCell label="Job Title" className="text-muted-foreground">{e.job_title || '-'}</TableCell>
+                    <TableCell label="Status" className="capitalize text-muted-foreground">{e.employment_status}</TableCell>
+                    <TableCell className="max-md:pt-2">
                       <RowActions
                         onEdit={canUpdateEmployee ? () => {
                           setShowEmployeeForm(false);

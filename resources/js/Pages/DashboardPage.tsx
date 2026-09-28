@@ -135,9 +135,9 @@ export default function DashboardPage({
               <DataState compact title="No pipeline activity yet" description="Create a deal to start seeing stage distribution." actionLabel="Create a deal" onAction={() => navigate('/deals')} />
             ) : pipelineStages.map((stage) => (
               <div key={stage.stage_name}>
-                <div className="mb-1.5 flex items-center justify-between text-sm">
-                  <span className="font-medium">{stage.stage_name}</span>
-                  <span className="text-muted-foreground tabular-nums">{formatCurrency(stage.total_value, currency)}</span>
+                <div className="mb-1.5 flex items-center justify-between gap-3 text-sm">
+                  <span className="min-w-0 truncate font-medium">{stage.stage_name}</span>
+                  <span className="shrink-0 text-muted-foreground tabular-nums">{formatCurrency(stage.total_value, currency)}</span>
                 </div>
                 <div className="h-2.5 overflow-hidden rounded-full bg-muted">
                   <div
@@ -162,9 +162,9 @@ export default function DashboardPage({
               <DataState compact title="No conversion data yet" description="Lead source performance will appear after leads begin converting." />
             ) : sources.map((src) => (
               <div key={src.source}>
-                <div className="mb-1.5 flex items-center justify-between text-sm">
-                  <span className="font-medium">{src.source}</span>
-                  <span className="font-semibold text-primary">{src.conversion_rate}%</span>
+                <div className="mb-1.5 flex items-center justify-between gap-3 text-sm">
+                  <span className="min-w-0 truncate font-medium">{src.source}</span>
+                  <span className="shrink-0 font-semibold text-primary tabular-nums">{src.conversion_rate}%</span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-muted">
                   <div className="h-full rounded-full bg-success transition-all duration-500" style={{ width: `${src.conversion_rate}%` }} />
@@ -189,17 +189,17 @@ export default function DashboardPage({
             ) : sources.slice(0, 4).map((src) => (
               <div
                 key={src.source}
-                className="flex items-center justify-between rounded-xl bg-muted/65 px-4 py-3"
+                className="flex items-center justify-between gap-3 rounded-xl bg-muted/65 px-4 py-3"
               >
-                <div>
-                  <p className="text-sm font-medium">{src.source}</p>
-                  <p className="text-xs text-muted-foreground">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{src.source}</p>
+                  <p className="truncate text-xs text-muted-foreground">
                     {src.converted} converted of {src.total}
                   </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold">{src.conversion_rate}%</p>
-                  <p className="text-xs font-medium text-success-foreground">{src.converted} won</p>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-bold tabular-nums">{src.conversion_rate}%</p>
+                  <p className="text-xs font-medium text-success-foreground tabular-nums">{src.converted} won</p>
                 </div>
               </div>
             ))}
@@ -215,7 +215,7 @@ export default function DashboardPage({
             {reps.length === 0 ? (
               <DataState compact title="No team results yet" description="Won deals will populate the team leaderboard." />
             ) : (
-              <Table>
+              <Table stacked>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="text-xs font-semibold tracking-wider uppercase">Rep</TableHead>
@@ -228,10 +228,10 @@ export default function DashboardPage({
               <TableBody>
                 {reps.map((rep) => (
                   <TableRow key={rep.user_id}>
-                    <TableCell className="font-medium">{rep.name}</TableCell>
-                    <TableCell>{rep.deals_won}</TableCell>
-                    <TableCell>{formatCurrency(rep.revenue, currency)}</TableCell>
-                    <TableCell>
+                    <TableCell className="font-medium max-md:text-base">{rep.name}</TableCell>
+                    <TableCell label="Deals Won" className="tabular-nums">{rep.deals_won}</TableCell>
+                    <TableCell label="Revenue" className="tabular-nums">{formatCurrency(rep.revenue, currency)}</TableCell>
+                    <TableCell label="Status">
                       <Badge
                         variant="secondary"
                         className={
@@ -243,7 +243,7 @@ export default function DashboardPage({
                         {rep.deals_won > 0 ? 'Active' : 'Pending'}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right max-md:pt-2">
                       <Button variant="ghost" size="sm" onClick={() => navigate('/deals')}>View deals</Button>
                     </TableCell>
                   </TableRow>

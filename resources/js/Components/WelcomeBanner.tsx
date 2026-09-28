@@ -26,12 +26,12 @@ export function WelcomeBanner({
             <p className="mt-2 max-w-xl text-sm leading-6 text-sidebar-foreground/60">{message}</p>
           </div>
           {signals.length > 0 && (
-            <div className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/10 lg:min-w-[420px]">
+            <div className="grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/10 sm:grid-cols-3 lg:min-w-[420px]">
               {signals.map((signal, index) => (
-                <div key={signal.label} className="relative bg-sidebar/90 px-4 py-3">
+                <div key={signal.label} className="relative flex items-baseline justify-between gap-3 bg-sidebar/90 px-4 py-3 sm:block">
                   <span className="absolute left-0 top-0 h-full w-0.5 bg-sidebar-primary" style={{ opacity: 1 - index * 0.2 }} />
-                  <p className="text-[10px] tracking-wide text-sidebar-foreground/45 uppercase">{signal.label}</p>
-                  <p className="mt-1 font-heading text-base font-semibold text-white tabular-nums">{signal.value}</p>
+                  <p className="text-[11px] tracking-wide text-sidebar-foreground/45 uppercase sm:text-[10px]">{signal.label}</p>
+                  <p className="font-heading text-base font-semibold text-white tabular-nums sm:mt-1">{signal.value}</p>
                 </div>
               ))}
             </div>
